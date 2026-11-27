@@ -1,0 +1,9 @@
+.git
+.logs
+.testing
+.research_files
+.env*
+*.local.json
+git-update.sh
+git-update.sh.debot
+bin

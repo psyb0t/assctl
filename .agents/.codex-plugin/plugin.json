@@ -1,0 +1,18 @@
+{
+  "name": "assctl",
+  "version": "1.0.0",
+  "description": "Create, validate, edit, and theme ASS subtitles.",
+  "author": {
+    "name": "psyb0t",
+    "url": "https://github.com/psyb0t"
+  },
+  "homepage": "https://github.com/psyb0t/assctl",
+  "repository": "https://github.com/psyb0t/assctl",
+  "license": "MIT",
+  "keywords": [
+    "ass",
+    "subtitles",
+    "karaoke"
+  ],
+  "skills": "./skills/"
+}

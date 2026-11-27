@@ -16,6 +16,7 @@ Your subtitles already have timing. Now make the damn things look good. assctl c
 - [Presets](#presets)
 - [Go package](#go-package)
 - [Agent integrations](#agent-integrations)
+- [Documentation](#documentation)
 - [Development](#development)
 - [Sponsor](#sponsor)
 - [License](#license)
@@ -26,6 +27,7 @@ Go 1.26 or newer.
 
 ```bash
 go install github.com/psyb0t/assctl/cmd/assctl@latest
+assctl fonts-install
 ```
 
 ## Quick start
@@ -38,7 +40,7 @@ assctl validate styled.ass
 
 `theme` updates the style definitions and preserves the original dialogue, event timing, inline tags, and unrelated sections. Use `--style NAME` to theme just one style. Use `-` to read or write through a pipe.
 
-`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. See the [CLI guide](docs/cli.md) for examples and the JSON shape.
+`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
 
 ## Presets
 
@@ -59,7 +61,7 @@ Run `assctl presets --json` to see the full values. Use one of those objects as 
 go get github.com/psyb0t/assctl/pkg/ass
 ```
 
-Use `ass.Parse` and `Document.Apply` for edits, or `ass.NewScript` and `Script.Encode` to create a script. See the [Go guide](docs/go.md).
+Use `ass.Parse` and `Document.Apply` for edits, or `ass.NewScript` and `Script.Encode` to create a script. See the [Go guide](https://psyb0t.github.io/assctl/go/).
 
 ## Agent integrations
 
@@ -75,17 +77,34 @@ codex plugin add assctl@psyb0t
 openclaw skills install @psyb0t/assctl
 ```
 
+## Documentation
+
+The [assctl documentation](https://psyb0t.github.io/assctl/) covers the CLI and Go library.
+
+| Guide | What you need |
+| --- | --- |
+| [Installation](https://psyb0t.github.io/assctl/install/) | Install, update, and prepare fonts |
+| [CLI](https://psyb0t.github.io/assctl/cli/) | Commands, flags, and JSON examples |
+| [Presets and fonts](https://psyb0t.github.io/assctl/presets/) | Palettes, backgrounds, and user font directories |
+| [Go library](https://psyb0t.github.io/assctl/go/) | Create and edit scripts in Go |
+| [Agents](https://psyb0t.github.io/assctl/agents/) | Skills and plugin setup |
+| [Troubleshooting](https://psyb0t.github.io/assctl/troubleshooting/) | Input, font, and output errors |
+| [Development](https://psyb0t.github.io/assctl/development/) | Build, test, docs, and releases |
+
 ## Development
 
 ```bash
 make check
 make test-coverage
 make sec
+make docs
 ```
 
-The Makefile runs Go checks in the same development image locally and in CI. Branch pushes check the source. Version tags wait for that commit's default-branch checks before the release and ClawHub publish. See [releases](docs/development.md).
+The Makefile runs Go checks in the same development image locally and in CI. Branch pushes check the source. Version tags wait for that commit's default-branch checks before the release and ClawHub publish. See [development and releases](https://psyb0t.github.io/assctl/development/).
 
 ## Sponsor
+
+[Sponsor on GitHub](https://github.com/sponsors/psyb0t)
 
 <a href="https://www.buymeacoffee.com/psyb0t"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-blue.png" alt="Buy Me a Coffee" height="60" width="217"></a>
 

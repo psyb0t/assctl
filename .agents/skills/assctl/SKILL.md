@@ -8,7 +8,7 @@ metadata:
     requires:
       bins: [assctl]
 permissions:
-  network: "None for editing subtitles."
+  network: "GitHub for fonts-install. Subtitle editing works locally."
   shell: "Run the assctl command."
   filesystem: "Read the requested subtitle or JSON file and write the requested output."
 ---
@@ -28,6 +28,8 @@ Use for ASS subtitle creation, inspection, fixes, and visual presets. Use timed 
 Use a speech transcription tool to obtain timestamps and a video renderer to turn subtitles into video pixels.
 
 ## Usage
+
+Run `assctl fonts-install` on the rendering machine when the preset fonts are missing. It installs verified DejaVu files into the user's font directory. Use `--preset NAME` to install one preset's requirements.
 
 ```bash
 assctl inspect captions.ass

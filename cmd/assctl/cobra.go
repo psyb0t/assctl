@@ -4,6 +4,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/psyb0t/ctxerrors"
+
+	"github.com/psyb0t/assctl/internal/pkg/fonts"
+	"github.com/psyb0t/assctl/pkg/ass"
 )
 
 func exactArgs(count int) cobra.PositionalArgs {
@@ -33,6 +36,7 @@ func (c cli) rootCommand() *cobra.Command {
 		c.createCommand(false), c.createCommand(true),
 		c.inspectCommand(false), c.inspectCommand(true),
 		c.editCommand(), c.themeCommand(), c.presetsCommand(),
+		c.fontsCommand(),
 		&cobra.Command{
 			Use: "version", Short: "Print the installed version", Args: exactArgs(0),
 			RunE: func(_ *cobra.Command, _ []string) error { return c.version() },
@@ -47,6 +51,30 @@ func (c cli) rootCommand() *cobra.Command {
 		}
 	}
 	return root
+}
+
+func (c cli) fontsCommand() *cobra.Command {
+	var name string
+	command := &cobra.Command{
+		Use: "fonts-install", Short: "Download and install the built-in preset fonts for your user", Args: exactArgs(0),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			presets := ass.Presets()
+			if name != "" {
+				preset, err := ass.LookupPreset(name)
+				if err != nil {
+					return ctxerrors.Wrap(err, "choose font preset")
+				}
+				presets = []ass.Preset{preset}
+			}
+			directory, err := fonts.Install(cmd.Context(), presets)
+			if err != nil {
+				return ctxerrors.Wrap(err, "install fonts")
+			}
+			return writeString(c.output, directory+"\n")
+		},
+	}
+	command.Flags().StringVar(&name, "preset", "", "Install one preset's fonts, or omit for every built-in preset")
+	return command
 }
 
 func (c cli) createCommand(captions bool) *cobra.Command {

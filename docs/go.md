@@ -1,3 +1,8 @@
+---
+title: Go library
+description: Read, write, validate, and edit ASS scripts through the public Go package.
+---
+
 # Go guide
 
 Import `github.com/psyb0t/assctl/pkg/ass`. All styles and events use the same structures as the CLI.

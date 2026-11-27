@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: psyb0t/reusable-github-workflows/.github/workflows/collaborators-only-workflow.yml@b0ce1c3ba861beb4e0566d1eb9f59d9fc87bdcda
+    uses: psyb0t/reusable-github-workflows/.github/workflows/collaborators-only-workflow.yml@master
     with:
       close_message: "No PRs. Best security policy ever. Open an issue and I'll fix it myself."
       lock: true

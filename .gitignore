@@ -34,3 +34,6 @@ git-update.sh
 git-update.sh.debot
 bin/
 sec.sarif
+/website/node_modules/
+/website/.docusaurus/
+/website/build/

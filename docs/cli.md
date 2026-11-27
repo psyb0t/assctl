@@ -1,3 +1,8 @@
+---
+title: CLI guide
+description: Commands, flags, JSON formats, file editing, and shell completion.
+---
+
 # CLI guide
 
 | Command | What it reads and writes |
@@ -11,6 +16,7 @@
 | `presets --json` | Print the full values for all presets. |
 | `version` or `--version` | Print the installed version. |
 | `completion SHELL` | Generate completion for Bash, Zsh, Fish, or PowerShell. |
+| `fonts-install --preset NAME` | Install one built-in preset's required fonts. Omit the flag for all presets. |
 
 Flags can appear before or after the positional input. Run `assctl COMMAND --help` for command-specific options. `--output` defaults to stdout and accepts `-`. `create` and `captions` default to stdin for their JSON specs. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
 
@@ -25,7 +31,11 @@ The command tree and help use Cobra. Run `assctl completion SHELL --help` for in
   "Height": 1920,
   "WordsPerLine": 4,
   "Dialogues": [
-    {"Start": 0, "End": 2200000000, "Text": "Write the first line here."}
+    {
+      "Start": 0,
+      "End": 2200000000,
+      "Text": "Write the first line here."
+    }
   ]
 }
 ```
@@ -42,10 +52,31 @@ assctl captions --preset black-gold --spec timing.json --output captions.ass
 
 ```json
 {
-  "Info": {"Title": "New intro"},
-  "Styles": [{"Name": "Text", "Fields": {"Fontsize": "54", "PrimaryColour": "&H00FFFFFF"}}],
+  "Info": {
+    "Title": "New intro"
+  },
+  "Styles": [
+    {
+      "Name": "Text",
+      "Fields": {
+        "Fontsize": "54",
+        "PrimaryColour": "&H00FFFFFF"
+      }
+    }
+  ],
   "Events": [
-    {"Index": 2, "Fields": {"Start": "0:00:00.50"}, "Override": {"Position": {"X": 540, "Y": 1550}}}
+    {
+      "Index": 2,
+      "Fields": {
+        "Start": "0:00:00.50"
+      },
+      "Override": {
+        "Position": {
+          "X": 540,
+          "Y": 1550
+        }
+      }
+    }
   ]
 }
 ```
@@ -63,15 +94,38 @@ Give `create` a JSON `ass.Script` with `Title`, `Resolution`, `Styles`, and `Eve
 ```json
 {
   "Title": "Timed dialogue",
-  "Resolution": {"Width": 1920, "Height": 1080},
+  "Resolution": {
+    "Width": 1920,
+    "Height": 1080
+  },
   "Styles": [
-    {"Name": "Default", "FontName": "DejaVu Sans", "FontSize": 46, "Bold": true,
-     "ScaleX": 100, "ScaleY": 100, "BorderStyle": 1, "Outline": 3,
-     "Alignment": 2, "MarginV": 50, "Encoding": 1}
+    {
+      "Name": "Default",
+      "FontName": "DejaVu Sans",
+      "FontSize": 46,
+      "Bold": true,
+      "ScaleX": 100,
+      "ScaleY": 100,
+      "BorderStyle": 1,
+      "Outline": 3,
+      "Alignment": 2,
+      "MarginV": 50,
+      "Encoding": 1
+    }
   ],
   "Events": [
-    {"Start": 0, "End": 2000000000, "Style": "Default", "Text": "{\\k60}Hello, {\\k100}world",
-     "Override": {"Position": {"X": 960, "Y": 920}}}
+    {
+      "Start": 0,
+      "End": 2000000000,
+      "Style": "Default",
+      "Text": "{\\k60}Hello, {\\k100}world",
+      "Override": {
+        "Position": {
+          "X": 960,
+          "Y": 920
+        }
+      }
+    }
   ]
 }
 ```

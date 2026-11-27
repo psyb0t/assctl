@@ -5,6 +5,7 @@ Install with Go 1.26 or newer.
 ```bash
 go install github.com/psyb0t/assctl/cmd/assctl@latest
 assctl version
+assctl fonts-install
 ```
 
 ## Named looks

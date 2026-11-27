@@ -121,6 +121,8 @@ func TestCLIRejectsInvalidArgumentsAndFiles(t *testing.T) {
 		want  error
 	}{
 		{name: "unknown command", args: []string{"unknown"}},
+		{name: "unknown font preset", args: []string{"fonts-install", "--preset", "missing"}, want: ass.ErrNotFound},
+		{name: "extra font argument", args: []string{"fonts-install", "extra"}, want: errUsage},
 		{name: "extra version argument", args: []string{"version", "extra"}, want: errUsage},
 		{name: "unrecognized flag", args: []string{"presets", "--bad"}},
 		{name: "two JSON values", args: []string{"create"}, input: scriptJSON + " {}", want: errUsage},

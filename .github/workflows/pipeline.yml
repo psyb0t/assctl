@@ -109,5 +109,6 @@ jobs:
       skill_names: '["assctl"]'
       publish_plugins: false
       plugin_names: "[]"
+      pin_images: '["psyb0t/assctl"]'
     secrets:
       clawhub_token: ${{ secrets.CLAWHUB_TOKEN }}

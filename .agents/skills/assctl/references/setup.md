@@ -11,12 +11,12 @@ assctl fonts-install
 The `psyb0t/assctl` Docker image already holds assctl, FFmpeg with libass for `burn`, and every preset font, so it needs no font download. Mount the working directory at `/work` and run as the current user:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl validate captions.ass
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
+docker run --rm --network none --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl validate captions.ass
+docker run --rm --network none --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
   burn input.mp4 --subtitles captions.ass --output output.mp4
 ```
 
-Only files under the mounted directory are visible to the container. See [Docker](https://psyb0t.github.io/assctl/install/#docker).
+`--network none` gives the container no network, which these commands do not need because the fonts are already in the image. Only files under the mounted directory are visible to the container, and it can write there. Mount a directory that holds just the inputs and the output. See [Docker](https://psyb0t.github.io/assctl/install/#docker).
 
 ## Named looks
 

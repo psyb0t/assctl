@@ -364,6 +364,10 @@ func TestScriptRejectsInvalidInfoHeaders(t *testing.T) {
 		{name: "padded key", info: map[string]string{" Key": "value"}},
 		{name: "newline in value", info: map[string]string{"Key": "bad\nvalue"}},
 		{name: "keys differing only by case", info: map[string]string{"Key": "one", "key": "two"}},
+		{name: "kerning has a typed field", info: map[string]string{"Kerning": "yes"}},
+		{name: "kerning in another case", info: map[string]string{"kerning": "no"}},
+		{name: "language has a typed field", info: map[string]string{"Language": "en"}},
+		{name: "language in another case", info: map[string]string{"LANGUAGE": "en"}},
 	}
 
 	for _, tc := range testCases {
@@ -398,4 +402,255 @@ func fixture(t *testing.T) string {
 	require.NoError(t, err)
 
 	return string(data)
+}
+
+func TestScriptKerningAndLanguageHeaders(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		kerning  bool
+		language string
+		info     map[string]string
+		want     string
+	}{
+		{
+			name: "neither",
+			want: "[Script Info]\nTitle: Metadata\nScriptType: v4.00+\n" +
+				"ScaledBorderAndShadow: yes\nYCbCr Matrix: None\nPlayResX: 1080\nPlayResY: 1920",
+		},
+		{
+			name: "kerning", kerning: true,
+			want: "[Script Info]\nTitle: Metadata\nScriptType: v4.00+\nKerning: yes\n" +
+				"ScaledBorderAndShadow: yes\nYCbCr Matrix: None\nPlayResX: 1080\nPlayResY: 1920",
+		},
+		{
+			name: "language", language: "ar",
+			want: "[Script Info]\nTitle: Metadata\nScriptType: v4.00+\nLanguage: ar\n" +
+				"ScaledBorderAndShadow: yes\nYCbCr Matrix: None\nPlayResX: 1080\nPlayResY: 1920",
+		},
+		{
+			name: "both before the custom headers", kerning: true, language: "ja", info: map[string]string{"Collisions": "Normal"},
+			want: "[Script Info]\nTitle: Metadata\nScriptType: v4.00+\nKerning: yes\nLanguage: ja\nCollisions: Normal\n" +
+				"ScaledBorderAndShadow: yes\nYCbCr Matrix: None\nPlayResX: 1080\nPlayResY: 1920",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			script := NewScript("Metadata", 1080, 1920)
+			script.Kerning, script.Language, script.Info = tc.kerning, tc.language, tc.info
+			data, err := script.MarshalText()
+			require.NoError(t, err)
+
+			section, _, found := strings.Cut(string(data), "\n\n")
+			require.True(t, found)
+			assert.Equal(t, tc.want, section)
+
+			document, err := Parse(bytes.NewReader(data))
+			require.NoError(t, err)
+			assert.Equal(t, tc.kerning, document.Contents().Info["Kerning"] == "yes")
+			assert.Equal(t, tc.language, document.Contents().Info["Language"])
+		})
+	}
+}
+
+func TestScriptRejectsInvalidLanguage(t *testing.T) {
+	t.Parallel()
+
+	for _, language := range []string{
+		"EN", "En", "e", "eng", "e1", "1e", "en-US", " en", "en ", "e n", "en\n", "\nen", "é", "ée", "ab\x00",
+	} {
+		t.Run(language, func(t *testing.T) {
+			t.Parallel()
+
+			script := NewScript("Metadata", 1080, 1920)
+			script.Language = language
+			data, err := script.MarshalText()
+			require.ErrorIs(t, err, commerr.ErrInvalidValue)
+			assert.Empty(t, data)
+		})
+	}
+}
+
+func TestScriptWritesEmbeddedFontsBetweenStylesAndEvents(t *testing.T) {
+	t.Parallel()
+
+	script := NewScript("Fonts", 640, 360)
+	script.AddStyle(Style{Name: "Default", FontName: FontDejaVuSans})
+	script.AddEvent(Event{Style: "Default", End: time.Second, Text: "Line"})
+
+	t.Run("no fonts writes no section", func(t *testing.T) {
+		t.Parallel()
+
+		data, err := script.MarshalText()
+		require.NoError(t, err)
+		assert.NotContains(t, string(data), "[Fonts]")
+	})
+
+	t.Run("fonts are written in order", func(t *testing.T) {
+		t.Parallel()
+
+		withFonts := *script
+		withFonts.Fonts = []EmbeddedFont{
+			{Name: "b.ttf", Data: []byte{0, 0, 0}},
+			{Name: "a.otf", Data: []byte{0xff, 0xff, 0xff, 0xff}},
+		}
+		data, err := withFonts.MarshalText()
+		require.NoError(t, err)
+
+		text := string(data)
+		assert.Contains(t, text, "\n\n[Fonts]\nfontname: b.ttf\n!!!!\nfontname: a.otf\n`````Q\n\n[Events]\n")
+		assert.Less(t, strings.Index(text, "[V4+ Styles]"), strings.Index(text, "[Fonts]"))
+		assert.Less(t, strings.Index(text, "[Fonts]"), strings.Index(text, "[Events]"))
+
+		document, err := Parse(strings.NewReader(text))
+		require.NoError(t, err)
+		require.NoError(t, document.Validate())
+		assert.Equal(t, text, document.String())
+		assert.Equal(t, map[string][]byte{"b.ttf": {0, 0, 0}, "a.otf": {0xff, 0xff, 0xff, 0xff}},
+			embeddedFontsOf(t, text))
+		assert.Len(t, document.Contents().Styles, 1)
+		assert.Len(t, document.Contents().Events, 1)
+	})
+
+	t.Run("a font over several lines", func(t *testing.T) {
+		t.Parallel()
+
+		data := make([]byte, 500)
+		for index := range data {
+			data[index] = byte(index * 7)
+		}
+		withFonts := *script
+		withFonts.Fonts = []EmbeddedFont{{Name: "big.ttf", Data: data}}
+		text, err := withFonts.MarshalText()
+		require.NoError(t, err)
+		assert.Equal(t, map[string][]byte{"big.ttf": data}, embeddedFontsOf(t, string(text)))
+	})
+
+	t.Run("invalid fonts are rejected before writing", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name  string
+			fonts []EmbeddedFont
+		}{
+			{name: "empty name", fonts: []EmbeddedFont{{Data: []byte{1}}}},
+			{name: "empty data", fonts: []EmbeddedFont{{Name: "a.ttf"}}},
+			{name: "multi-line name", fonts: []EmbeddedFont{{Name: "a\nb.ttf", Data: []byte{1}}}},
+			{name: "padded name", fonts: []EmbeddedFont{{Name: "a.ttf ", Data: []byte{1}}}},
+			{name: "duplicate name", fonts: []EmbeddedFont{{Name: "a.ttf", Data: []byte{1}}, {Name: "A.TTF", Data: []byte{2}}}},
+		}
+		for _, tc := range testCases {
+			rejected := *script
+			rejected.Fonts = tc.fonts
+			data, err := rejected.MarshalText()
+			require.ErrorIs(t, err, commerr.ErrInvalidValue, tc.name)
+			assert.Empty(t, data, tc.name)
+		}
+	})
+}
+
+func TestStyleBorderStyleAndEncodingRanges(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		border       BorderStyle
+		encoding     Encoding
+		wantBorder   string
+		wantEncoding string
+		wantErr      error
+	}{
+		{name: "unset border", border: 0, encoding: EncodingDefault, wantBorder: "0", wantEncoding: "1"},
+		{name: "outline and shadow", border: BorderStyleOutlineDropShadow, wantBorder: "1", wantEncoding: "0"},
+		{name: "opaque box", border: BorderStyleOpaqueBox, wantBorder: "3", wantEncoding: "0"},
+		{name: "event box", border: BorderStyleEventBox, wantBorder: "4", wantEncoding: "0"},
+		{name: "automatic direction", encoding: EncodingAuto, wantBorder: "0", wantEncoding: "-1"},
+		{name: "largest named encoding", encoding: EncodingOEM, wantBorder: "0", wantEncoding: "255"},
+		{name: "border style 2 is not a style", border: 2, wantErr: commerr.ErrInvalidValue},
+		{name: "border style 5", border: 5, wantErr: commerr.ErrInvalidValue},
+		{name: "negative border style", border: -1, wantErr: commerr.ErrInvalidValue},
+		{name: "encoding below automatic", encoding: -2, wantErr: commerr.ErrInvalidValue},
+		{name: "very negative encoding", encoding: -1000, wantErr: commerr.ErrInvalidValue},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			script := NewScript("Border", 640, 360)
+			script.AddStyle(Style{Name: "Default", FontName: FontDejaVuSans, BorderStyle: tc.border, Encoding: tc.encoding})
+			data, err := script.MarshalText()
+			require.ErrorIs(t, err, tc.wantErr)
+			if tc.wantErr != nil {
+				assert.Empty(t, data)
+
+				return
+			}
+
+			document, err := Parse(bytes.NewReader(data))
+			require.NoError(t, err)
+			style := document.Contents().Styles[0]
+			assert.Equal(t, tc.wantBorder, style["BorderStyle"])
+			assert.Equal(t, tc.wantEncoding, style["Encoding"])
+		})
+	}
+
+	assert.Equal(t, BorderStyle(4), BorderStyleEventBox)
+	assert.Equal(t, Encoding(-1), EncodingAuto)
+}
+
+func TestNumbersRoundToThreeDecimals(t *testing.T) {
+	t.Parallel()
+
+	height, ratio := 1920.0, 0.045
+	product := height * ratio
+	require.NotEqual(t, "86.4", strconv.FormatFloat(product, 'f', -1, 64),
+		"the product must carry floating point noise for this test to mean anything")
+
+	testCases := []struct {
+		name  string
+		value float64
+		want  string
+	}{
+		{name: "ratio product", value: product, want: "86.4"},
+		{name: "sum noise", value: 0.1 + 0.2, want: "0.3"},
+		{name: "whole number", value: 50, want: "50"},
+		{name: "one decimal", value: 2.5, want: "2.5"},
+		{name: "three decimals kept", value: 1.234, want: "1.234"},
+		{name: "rounded down", value: 1.2341, want: "1.234"},
+		{name: "rounded up", value: 1.2346, want: "1.235"},
+		{name: "tiny value", value: 0.0004, want: "0"},
+		{name: "negative", value: -2.5004, want: "-2.5"},
+		{name: "zero", value: 0, want: "0"},
+		{name: "tiny negative value", value: -0.0004, want: "0"},
+		{name: "negative zero", value: math.Copysign(0, -1), want: "0"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tc.want, number(tc.value))
+		})
+	}
+
+	t.Run("style and override output", func(t *testing.T) {
+		t.Parallel()
+
+		script := NewScript("Numbers", 1080, 1920)
+		script.AddStyle(Style{Name: "Default", FontName: FontDejaVuSans, FontSize: product})
+		data, err := script.MarshalText()
+		require.NoError(t, err)
+		document, err := Parse(bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, "86.4", document.Contents().Styles[0]["Fontsize"])
+
+		tags, err := (&Override{FontSize: &product, Position: &Position{X: product, Y: 0.1 + 0.2}}).Tags()
+		require.NoError(t, err)
+		assert.Equal(t, `{\pos(86.4,0.3)\fs86.4}`, tags)
+	})
 }

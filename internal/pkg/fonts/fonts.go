@@ -245,3 +245,20 @@ func writeFont(path string, data []byte) error {
 
 	return nil
 }
+
+// FontFiles returns the file names Install writes for the presets' fonts,
+// without the license files, in first-seen order.
+func FontFiles(presets []ass.Preset) ([]string, error) {
+	var names []string
+	for _, preset := range presets {
+		source, err := builtInFonts.source(preset)
+		if err != nil {
+			return nil, ctxerrors.Wrapf(err, "select font for preset %q", preset.Name)
+		}
+		if !slices.Contains(names, source.font.name) {
+			names = append(names, source.font.name)
+		}
+	}
+
+	return names, nil
+}

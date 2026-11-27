@@ -18,6 +18,8 @@ const (
 	headerScriptInfo = "[Script Info]"
 	headerStyles     = "[V4+ Styles]"
 	headerEvents     = "[Events]"
+	headerFonts      = "[Fonts]"
+	fontNamePrefix   = "fontname: "
 )
 
 // Record types that start a line inside a section.
@@ -36,9 +38,11 @@ const (
 	infoPlayResY              = "PlayResY"
 	infoScaledBorderAndShadow = "ScaledBorderAndShadow"
 	infoYCbCrMatrix           = "YCbCr Matrix"
+	infoKerning               = "Kerning"
+	infoLanguage              = "Language"
 
 	scriptTypeV4Plus = "v4.00+"
-	scaledBorderOn   = "yes"
+	headerYes        = "yes"
 	ycbcrMatrixNone  = "None"
 )
 
@@ -96,10 +100,14 @@ const (
 )
 
 // Placement ratios shared by the social presets and the named text positions.
+// Lower and centered text keeps clear of TikTok's button column on the right,
+// so it uses the cross-platform safe area's left and lower-right margins.
 const (
-	socialSideMarginRatio  = 0.18
 	socialUpperMarginRatio = 0.18
+	socialUpperSideRatio   = 0.18
 	socialLowerMarginRatio = 0.4
+	safeLeftRatio          = tiktokSide
+	safeLowerRightRatio    = tiktokLowerRight
 )
 
 // Characters that would end an ASS line or field early.

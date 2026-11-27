@@ -9,6 +9,14 @@ description: Fix rejected input, invalid timings, missing fonts, and failed writ
 
 Run `assctl fonts-install` on the machine that renders your subtitles. Check the family with `assctl presets --json`. On Linux, refresh Fontconfig with `fc-cache -f` and restart the renderer. Inline font overrides may take precedence over a theme.
 
+## Embedding fonts fails
+
+`--embed-preset-fonts` embeds only the fonts of the built-in presets. With a `--theme-file` that names another font, pass that font's file with `--embed-font` instead. A font file is limited to 64 MiB. A font whose file name is already in the script, ignoring case, is rejected; rename the file or leave it out.
+
+## The safe-area check fails
+
+`safe-area` lists each style or event whose margin is smaller than the platform needs, with the margin it has and the one it needs. Apply a social preset or a named position, or raise that margin with `edit`. See [platform safe areas](positions.md#platform-safe-areas).
+
 ## The font download fails
 
 A first install requires access to the selected font's pinned upstream download. Sources include GitHub and DaFont. Restore connectivity and retry. Verified installed files are reused offline. Checksum failures stop installation before files are changed.

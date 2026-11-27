@@ -62,7 +62,7 @@ func TestCLIPositionsAndTags(t *testing.T) {
 				require.NoError(t, json.Unmarshal([]byte(runCLI(t, text, "inspect", "-")), &contents))
 				require.NotEmpty(t, contents.Styles)
 				assert.Equal(t, "8", contents.Styles[0]["Alignment"])
-				assert.Equal(t, "172", contents.Styles[0]["MarginV"])
+				assert.Equal(t, "173", contents.Styles[0]["MarginV"])
 			})
 		}
 	})
@@ -114,6 +114,13 @@ func TestCLIPositionsAndTags(t *testing.T) {
 func TestCLICreationWithIndependentPosition(t *testing.T) {
 	t.Parallel()
 
+	// Side margins on the 540 wide canvas: the upper position keeps 18% each side,
+	// the others keep 120/1080 on the left and 300/1080 on the right.
+	sideMargins := map[string]struct{ left, right string }{
+		"portrait-upper":        {left: "98", right: "98"},
+		"portrait-center":       {left: "60", right: "150"},
+		"portrait-lower-middle": {left: "60", right: "150"},
+	}
 	testCases := []struct {
 		name  string
 		input string
@@ -130,14 +137,16 @@ func TestCLICreationWithIndependentPosition(t *testing.T) {
 			t.Parallel()
 
 			for _, position := range ass.TextPositions() {
+				want, known := sideMargins[position.Name]
+				require.True(t, known, "no expected margins for %s", position.Name)
 				output := runCLI(t, tc.input, tc.name, "--text-position", position.Name)
 				document, err := ass.Parse(strings.NewReader(output))
 				require.NoError(t, err)
 				require.NoError(t, document.Validate())
 
 				for _, style := range document.Contents().Styles {
-					assert.Equal(t, "97", style["MarginL"], "%s/%s left margin", tc.name, position.Name)
-					assert.Equal(t, "97", style["MarginR"], "%s/%s right margin", tc.name, position.Name)
+					assert.Equal(t, want.left, style["MarginL"], "%s/%s left margin", tc.name, position.Name)
+					assert.Equal(t, want.right, style["MarginR"], "%s/%s right margin", tc.name, position.Name)
 					if position.Name == "portrait-center" {
 						assert.Equal(t, "0", style["MarginV"], "center retained a vertical margin")
 					}

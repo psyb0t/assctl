@@ -1,11 +1,13 @@
 ---
 title: Presets and fonts
-description: Choose a complete look and install the fonts required by built-in presets.
+description: Choose a complete look, install or embed the fonts built-in presets need, and keep social captions inside platform safe areas.
 ---
 
 # Presets and fonts
 
-Each preset includes its font, text and secondary karaoke colors, background opacity, outline, shadow, and placement. Font size and vertical margin scale with the script height. Social presets also scale their horizontal margins with the script width.
+Each preset includes its font, text and secondary karaoke colors, background opacity, outline, shadow, and placement. Font size and vertical margin scale with the script height. Social presets also scale their horizontal margins with the script width and stay inside the [combined safe area](positions.md#platform-safe-areas) of TikTok, YouTube Shorts and Instagram Reels on a vertical video of any size. Lower and centered social looks keep a wider right margin, clear of TikTok's buttons. `assctl safe-area` checks a finished file.
+
+A custom theme file can set `SideMarginRatio` for both sides and `RightMarginRatio` to give the right side its own margin.
 
 | Preset | Font | Text and background | Secondary karaoke color |
 | --- | --- | --- | --- |
@@ -32,6 +34,20 @@ assctl fonts-install --preset tiktok-bold
 assctl fonts-install --preset the-bold
 ```
 
+## Embed fonts
+
+So that the machine that renders the video needs no installed fonts, store them in the subtitle file's `[Fonts]` section:
+
+```bash
+assctl captions --preset tiktok-bold --embed-preset-fonts --spec timing.json --output captions.ass
+assctl theme --preset the-bold --embed-preset-fonts --output themed.ass captions.ass
+assctl create --embed-font MyFont.ttf --spec script.json --output script.ass
+```
+
+`--embed-preset-fonts` on `captions` or `theme` first installs the preset's verified fonts on your machine, like `fonts-install`, downloading only the missing ones, then embeds them. It works only with the fonts of the built-in presets; a `--theme-file` with any other font fails, so embed that font with `--embed-font`. `--embed-font FILE` on `create`, `captions` or `theme` embeds any font file and can repeat. A file embedded twice under the same name is rejected.
+
+FFmpeg's `subtitles` and `ass` filters load embedded fonts. Embedding copies the font into every file you share, so check that its license allows that. The SIL OFL fonts and DejaVu allow it. Read THE BOLD FONT's accompanying notice before sharing files that embed it.
+
 Omit `--preset` to install every built-in preset's required font. Downloads come directly from upstream. The installer verifies pinned SHA-256 checksums, installs ordinary TTF files, and keeps each source's license or accompanying notice beside them. Installed, verified files work offline. Corrupted files are replaced on the next successful installation. Verification errors stop that font download before it is written.
 
 | Font | Source and download | License |
@@ -52,7 +68,7 @@ THE BOLD FONT's free version has fewer glyphs and no lowercase designs. Use uppe
 
 Restart a renderer that was running during installation. On Linux, run `fc-cache -f` if Fontconfig still selects a fallback. On Windows, `fonts-install` also registers each font for the current user, so applications find it without opening the file. The installation and rendering checks run on Linux.
 
-ASS files store family names. Install fonts on the machine that renders the video. For custom fonts, supply the font files yourself.
+ASS files store family names. Install the fonts on the machine that renders the video, or [embed them](#embed-fonts). For custom fonts, supply the font files yourself.
 
 ## Customize a preset
 
@@ -60,6 +76,6 @@ Run `assctl presets --json` and save one object as a custom theme. Edit its fiel
 
 ## Caption placement
 
-Presets include a default layout. Choose `--text-position` to replace it independently of appearance. The [text position guide](positions.md) owns the layout ratios, canvas rules, and event override behavior. These are practical starting layouts, not platform-certified safe areas. Preview them with the destination app's controls visible.
+Presets include a default layout. Choose `--text-position` to replace it independently of appearance. The [text position guide](positions.md) owns the layout ratios, canvas rules, and event override behavior. The social layouts follow the platforms' published safe areas. Preview captions with the destination app's controls visible, because a long caption or an extra overlay can still cover them.
 
 The MIT license covers assctl's own code. Downloaded fonts retain their own terms.

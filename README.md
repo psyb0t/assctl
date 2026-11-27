@@ -39,7 +39,7 @@ assctl position --text-position portrait-lower-middle --output moved.ass styled.
 assctl validate styled.ass
 ```
 
-`theme` updates the style definitions and preserves the original dialogue, event timing, inline tags, and unrelated sections. Use `--style NAME` to theme just one style. Use `-` to read or write through a pipe.
+`theme` updates the style definitions and preserves the original dialogue, event timing, inline tags, and unrelated sections. Use `--style NAME` to theme one style. Use `-` to read or write through a pipe.
 
 `create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. `tags` generates override blocks for karaoke, drawing, fades, clipping, and animation. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
 
@@ -63,7 +63,7 @@ Pick a whole look, including the font, colors, background, outline, shadow, and 
 
 Run `assctl presets --json` to see the full values. Use one of those objects as a starting point for `--theme-file` with `captions` or `theme`. Inline overrides in an existing subtitle still take effect.
 
-Social presets leave room for app controls and scale their margins with your script resolution. Fonts download from their upstream sources through `fonts-install`. See [font licenses, source downloads, and positioning](https://psyb0t.github.io/assctl/presets/).
+Social presets keep text inside the safe area TikTok, YouTube Shorts and Instagram Reels publish for their buttons and captions, on a vertical video of any size. `assctl safe-area FILE` checks any subtitle file against one platform or all three. Fonts download from their upstream sources through `fonts-install`, or straight into the subtitle file with `--embed-preset-fonts`, so the machine that renders the video needs no installed fonts. See [font licenses, source downloads, and positioning](https://psyb0t.github.io/assctl/presets/).
 
 Use `--text-position` with `captions`, `create`, or `theme` to choose placement independently of appearance. `assctl positions` lists the layouts. Existing event positioning still takes precedence. See [text positions](https://psyb0t.github.io/assctl/positions/).
 
@@ -97,9 +97,9 @@ The [assctl documentation](https://psyb0t.github.io/assctl/) covers the CLI and 
 | --- | --- |
 | [Installation](https://psyb0t.github.io/assctl/install/) | Install, update, and prepare fonts |
 | [CLI](https://psyb0t.github.io/assctl/cli/) | Commands, flags, and JSON examples |
-| [Presets and fonts](https://psyb0t.github.io/assctl/presets/) | Palettes, backgrounds, and user font directories |
-| [Text positions](https://psyb0t.github.io/assctl/positions/) | Independent placement, margins, and override precedence |
-| [ASS features](https://psyb0t.github.io/assctl/ass-features/) | Tags, drawing, karaoke, headers, and wrapping modes |
+| [Presets and fonts](https://psyb0t.github.io/assctl/presets/) | Palettes, backgrounds, font installation, and embedded fonts |
+| [Text positions](https://psyb0t.github.io/assctl/positions/) | Independent placement, platform safe areas, margins, and override precedence |
+| [ASS features](https://psyb0t.github.io/assctl/ass-features/) | Tags, drawing, karaoke, effects, embedded fonts, libass extensions, headers, and wrapping modes |
 | [Go library](https://psyb0t.github.io/assctl/go/) | Create and edit scripts in Go |
 | [Agents](https://psyb0t.github.io/assctl/agents/) | Skills and plugin setup |
 | [Troubleshooting](https://psyb0t.github.io/assctl/troubleshooting/) | Input, font, and output errors |

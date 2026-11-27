@@ -46,10 +46,10 @@ Inspect a document first. Its JSON output shows the exact field names. Supply an
 assctl edit --spec edits.json --output updated.ass captions.ass
 ```
 
-See the [CLI guide](https://github.com/psyb0t/assctl/blob/main/docs/cli.md) for the full creation and editing examples.
+See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for the full creation and editing examples.
 
 ## Independent placement and tags
 
-Use `assctl positions --json` to list `portrait-upper`, `portrait-center`, and `portrait-lower-middle`. `--text-position NAME` works with `create`, `captions`, and `theme`. For a placement-only edit, use `assctl position INPUT --text-position NAME --output FILE`; `--style NAME` limits it to one style. These layouts use script coordinates and cannot guarantee clearance from every app's controls.
+Use `assctl positions --json` to list `portrait-upper`, `portrait-center`, and `portrait-lower-middle`. `--text-position NAME` works with `create`, `captions`, and `theme`. For a placement-only edit, use `assctl position INPUT --text-position NAME --output FILE`; `--style NAME` limits it to one style. Every named layout stays inside the safe area TikTok, YouTube Shorts and Instagram Reels publish for vertical video of any size. `assctl safe-area FILE --platform all|tiktok|shorts|reels` checks a finished file; it reads style and event margins, not inline `\an`, `\pos` or `\move` tags.
 
 `assctl tags --spec override.json` prints an ASS override block. The JSON shape is `ass.Override`, also accepted by event creation and edits. See [ASS features](https://psyb0t.github.io/assctl/ass-features/) for drawing, karaoke, clipping, wrapping, and validation boundaries.

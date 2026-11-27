@@ -43,6 +43,7 @@ func (c cli) rootCommand() *cobra.Command {
 		c.editCommand(), c.themeCommand(), c.presetsCommand(),
 		c.fontsCommand(),
 		c.positionsCommand(), c.positionCommand(), c.tagsCommand(),
+		c.safeAreaCommand(), c.safeAreasCommand(),
 		&cobra.Command{
 			Use: "version", Short: "Print the installed version", Args: exactArgs(0),
 			RunE: func(_ *cobra.Command, _ []string) error { return c.version() },
@@ -92,23 +93,25 @@ func (c cli) createCommand(captions bool) *cobra.Command {
 	if captions {
 		name, description = "captions", "Style timed captions using a preset or custom theme"
 	}
-	var spec, output, preset, theme, position string
+	opts := createOptions{captions: captions}
 	command := &cobra.Command{
 		Use: name, Short: description, Args: exactArgs(0),
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if cmd.Flags().Changed("text-position") && position == "" {
+			if cmd.Flags().Changed("text-position") && opts.position == "" {
 				return ctxerrors.Wrap(commerr.ErrInvalidArgument, "--text-position cannot be empty")
 			}
 
-			return c.create(spec, output, captions, preset, theme, position)
+			return c.create(cmd.Context(), opts)
 		},
 	}
-	command.Flags().StringVar(&spec, "spec", stream, "JSON file or - for stdin")
-	command.Flags().StringVar(&output, "output", stream, "ASS file or - for stdout")
-	command.Flags().StringVar(&position, "text-position", "", "Named style placement; existing event positions are preserved")
+	command.Flags().StringVar(&opts.spec, "spec", stream, "JSON file or - for stdin")
+	command.Flags().StringVar(&opts.target, "output", stream, "ASS file or - for stdout")
+	command.Flags().StringVar(&opts.position, "text-position", "", "Named style placement; existing event positions are preserved")
+	command.Flags().StringArrayVar(&opts.fonts.files, "embed-font", nil, "Font file to embed in the script; repeat for more")
 	if captions {
-		command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
-		command.Flags().StringVar(&theme, "theme-file", "", "JSON file with custom preset values")
+		command.Flags().StringVar(&opts.preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
+		command.Flags().StringVar(&opts.theme, "theme-file", "", "JSON file with custom preset values")
+		command.Flags().BoolVar(&opts.fonts.presetFonts, "embed-preset-fonts", false, "Install the preset's verified fonts and embed them")
 	}
 	return command
 }
@@ -136,22 +139,25 @@ func (c cli) editCommand() *cobra.Command {
 }
 
 func (c cli) themeCommand() *cobra.Command {
-	var preset, custom, style, output, position string
+	var opts themeOptions
 	command := &cobra.Command{
 		Use: "theme INPUT", Short: "Apply a preset or custom theme to existing styles", Args: exactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().Changed("text-position") && position == "" {
+			if cmd.Flags().Changed("text-position") && opts.position == "" {
 				return ctxerrors.Wrap(commerr.ErrInvalidArgument, "--text-position cannot be empty")
 			}
+			opts.source = args[0]
 
-			return c.theme(preset, custom, style, output, args[0], position)
+			return c.theme(cmd.Context(), opts)
 		},
 	}
-	command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
-	command.Flags().StringVar(&custom, "theme-file", "", "JSON file with custom preset values")
-	command.Flags().StringVar(&style, "style", "", "Theme one named style, or omit to theme every style")
-	command.Flags().StringVar(&output, "output", stream, "ASS file or - for stdout")
-	command.Flags().StringVar(&position, "text-position", "", "Named style placement; existing event positions are preserved")
+	command.Flags().StringVar(&opts.preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
+	command.Flags().StringVar(&opts.custom, "theme-file", "", "JSON file with custom preset values")
+	command.Flags().StringVar(&opts.style, "style", "", "Theme one named style, or omit to theme every style")
+	command.Flags().StringVar(&opts.target, "output", stream, "ASS file or - for stdout")
+	command.Flags().StringVar(&opts.position, "text-position", "", "Named style placement; existing event positions are preserved")
+	command.Flags().StringArrayVar(&opts.fonts.files, "embed-font", nil, "Font file to embed in the output; repeat for more")
+	command.Flags().BoolVar(&opts.fonts.presetFonts, "embed-preset-fonts", false, "Install the preset's verified fonts and embed them")
 	return command
 }
 
@@ -205,4 +211,28 @@ func showHelp(cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+func (c cli) safeAreaCommand() *cobra.Command {
+	var platform string
+	command := &cobra.Command{
+		Use:   "safe-area INPUT",
+		Short: "Report styles and events whose margins reach under a platform's buttons and captions",
+		Args:  exactArgs(1),
+		RunE:  func(_ *cobra.Command, args []string) error { return c.safeArea(platform, args[0]) },
+	}
+	command.Flags().StringVar(&platform, "platform", ass.SafeAreaAll, "Safe area: all, tiktok, shorts or reels")
+
+	return command
+}
+
+func (c cli) safeAreasCommand() *cobra.Command {
+	var showJSON bool
+	command := &cobra.Command{
+		Use: "safe-areas", Short: "List platform safe areas", Args: exactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error { return c.safeAreas(showJSON) },
+	}
+	command.Flags().BoolVar(&showJSON, "json", false, "Include the edge ratios")
+
+	return command
 }

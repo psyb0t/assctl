@@ -28,20 +28,22 @@ type TextPosition struct {
 	RightMarginRatio float64
 }
 
-// TextPositions returns independent values in display order. Portrait names describe intended use.
+// TextPositions returns independent values in display order. Portrait names
+// describe intended use. Every position clears the "all" safe area on a
+// vertical video.
 func TextPositions() []TextPosition {
 	return []TextPosition{
 		{
 			Name: "portrait-upper", Alignment: AlignmentTopCenter, MarginRatio: socialUpperMarginRatio,
-			LeftMarginRatio: socialSideMarginRatio, RightMarginRatio: socialSideMarginRatio,
+			LeftMarginRatio: socialUpperSideRatio, RightMarginRatio: socialUpperSideRatio,
 		},
 		{
 			Name: "portrait-center", Alignment: AlignmentMiddleCenter,
-			LeftMarginRatio: socialSideMarginRatio, RightMarginRatio: socialSideMarginRatio,
+			LeftMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 		},
 		{
 			Name: "portrait-lower-middle", Alignment: AlignmentBottomCenter, MarginRatio: socialLowerMarginRatio,
-			LeftMarginRatio: socialSideMarginRatio, RightMarginRatio: socialSideMarginRatio,
+			LeftMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 		},
 	}
 }
@@ -73,9 +75,9 @@ func (p TextPosition) style(style Style, width, height int) (Style, error) {
 		return Style{}, ctxerrors.Wrap(commerr.ErrInvalidValue, "position has no horizontal space or uses an ignored center margin")
 	}
 	style.Alignment = p.Alignment
-	style.MarginL = int(float64(width) * p.LeftMarginRatio)
-	style.MarginR = int(float64(width) * p.RightMarginRatio)
-	style.MarginV = int(float64(height) * p.MarginRatio)
+	style.MarginL = scaled(width, p.LeftMarginRatio)
+	style.MarginR = scaled(width, p.RightMarginRatio)
+	style.MarginV = scaled(height, p.MarginRatio)
 	return style, nil
 }
 
@@ -137,10 +139,11 @@ func (d *Document) resolution() (int, int, error) {
 			continue
 		}
 		value, err := strconv.ParseInt(strings.TrimSpace(row.values[0]), 10, 32)
-		if err != nil || value <= 0 {
+		if err != nil {
 			return 0, 0, ctxerrors.Wrapf(commerr.ErrInvalidValue, "invalid %s script dimension", key)
 		}
-		dimensions[index] = int(value)
+		// libass treats zero and negative dimensions as missing and infers them.
+		dimensions[index] = max(int(value), 0)
 	}
 	width, height := dimensions[0], dimensions[1]
 	switch {
@@ -156,4 +159,11 @@ func (d *Document) resolution() (int, int, error) {
 		width = int(min(int64(height)+int64(height)/3, int64(maxScriptDimension)))
 	}
 	return width, height, nil
+}
+
+// scaled returns ratio of size in whole script pixels, rounded up so a margin
+// never ends short of its ratio. The tolerance keeps floating-point noise such
+// as 120.00000000000001 from adding a pixel.
+func scaled(size int, ratio float64) int {
+	return int(math.Ceil(float64(size)*ratio - pixelTolerance))
 }

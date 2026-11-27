@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 
 	"github.com/psyb0t/ctxerrors"
@@ -19,13 +20,27 @@ type cli struct {
 	output io.Writer
 }
 
-func (c cli) create(specPath, target string, captions bool, presetName, themePath, positionName string) error {
-	script, err := c.readScript(specPath, captions, presetName, themePath)
+// createOptions are the inputs of the create and captions commands.
+type createOptions struct {
+	spec, target, preset, theme, position string
+	captions                              bool
+	fonts                                 fontOptions
+}
+
+func (c cli) create(ctx context.Context, opts createOptions) error {
+	script, preset, err := c.readScript(opts.spec, opts.captions, opts.preset, opts.theme)
 	if err != nil {
 		return ctxerrors.Wrap(err, "prepare script")
 	}
-	if positionName != "" {
-		position, err := ass.LookupTextPosition(positionName)
+	if opts.fonts.enabled() {
+		embedded, err := opts.fonts.load(ctx, preset)
+		if err != nil {
+			return ctxerrors.Wrap(err, "load fonts to embed")
+		}
+		script.Fonts = append(script.Fonts, embedded...)
+	}
+	if opts.position != "" {
+		position, err := ass.LookupTextPosition(opts.position)
 		if err != nil {
 			return ctxerrors.Wrap(err, "choose text position")
 		}
@@ -38,35 +53,36 @@ func (c cli) create(specPath, target string, captions bool, presetName, themePat
 	if err != nil {
 		return ctxerrors.Wrap(err, "format script")
 	}
-	if err := c.save(target, string(data)); err != nil {
+	if err := c.save(opts.target, string(data)); err != nil {
 		return ctxerrors.Wrap(err, "save script")
 	}
 
 	return nil
 }
 
-func (c cli) readScript(path string, captions bool, presetName, themePath string) (ass.Script, error) {
+// readScript returns the script to write and, for captions, the preset that styled it.
+func (c cli) readScript(path string, captions bool, presetName, themePath string) (ass.Script, ass.Preset, error) {
 	if !captions {
 		script, err := decodeFile[ass.Script](path, c.input)
 		if err != nil {
-			return ass.Script{}, ctxerrors.Wrap(err, "read script spec")
+			return ass.Script{}, ass.Preset{}, ctxerrors.Wrap(err, "read script spec")
 		}
 
-		return script, nil
+		return script, ass.Preset{}, nil
 	}
 	if (presetName != "" && themePath != "") || (themePath == stream && path == stream) {
-		return ass.Script{}, ctxerrors.Wrap(commerr.ErrInvalidArgument, "choose one of --preset and --theme-file and use stdin once")
+		return ass.Script{}, ass.Preset{}, ctxerrors.Wrap(commerr.ErrInvalidArgument, "choose one of --preset and --theme-file and use stdin once")
 	}
 	preset, err := c.loadPreset(presetName, themePath)
 	if err != nil {
-		return ass.Script{}, ctxerrors.Wrap(err, "choose caption preset")
+		return ass.Script{}, ass.Preset{}, ctxerrors.Wrap(err, "choose caption preset")
 	}
 	spec, err := decodeFile[ass.CaptionSpec](path, c.input)
 	if err != nil {
-		return ass.Script{}, ctxerrors.Wrap(err, "read timed captions")
+		return ass.Script{}, ass.Preset{}, ctxerrors.Wrap(err, "read timed captions")
 	}
 
-	return preset.Captions(spec), nil
+	return preset.Captions(spec), preset, nil
 }
 
 func (c cli) inspect(source string, validate bool) error {
@@ -114,7 +130,14 @@ func (c cli) edit(spec, target, source string) error {
 	return nil
 }
 
-func (c cli) theme(preset, custom, style, target, source, positionName string) error {
+// themeOptions are the inputs of the theme command.
+type themeOptions struct {
+	preset, custom, style, target, source, position string
+	fonts                                           fontOptions
+}
+
+func (c cli) theme(ctx context.Context, opts themeOptions) error {
+	preset, custom, style, target, source := opts.preset, opts.custom, opts.style, opts.target, opts.source
 	if (preset != "" && custom != "") || (custom == stream && source == stream) {
 		return ctxerrors.Wrap(commerr.ErrInvalidArgument, "choose one of --preset and --theme-file and use stdin once")
 	}
@@ -130,14 +153,24 @@ func (c cli) theme(preset, custom, style, target, source, positionName string) e
 	if err != nil {
 		return ctxerrors.Wrap(err, "apply theme")
 	}
-	if positionName != "" {
-		position, err := ass.LookupTextPosition(positionName)
+	if opts.position != "" {
+		position, err := ass.LookupTextPosition(opts.position)
 		if err != nil {
 			return ctxerrors.Wrap(err, "choose text position")
 		}
 		updated, err = updated.WithTextPosition(position, style)
 		if err != nil {
 			return ctxerrors.Wrap(err, "position themed styles")
+		}
+	}
+	if opts.fonts.enabled() {
+		embedded, err := opts.fonts.load(ctx, look)
+		if err != nil {
+			return ctxerrors.Wrap(err, "load fonts to embed")
+		}
+		updated, err = updated.EmbedFonts(embedded)
+		if err != nil {
+			return ctxerrors.Wrap(err, "embed fonts")
 		}
 	}
 	if err := c.save(target, updated.String()); err != nil {
@@ -233,6 +266,52 @@ func (c cli) presets(showJSON bool) error {
 	for _, preset := range presets {
 		if err := writeString(c.output, preset.Name+"\n"); err != nil {
 			return ctxerrors.Wrap(err, "list presets")
+		}
+	}
+
+	return nil
+}
+
+// safeArea prints every style or event that reaches into the platform's unsafe
+// edges and fails when there is one.
+func (c cli) safeArea(platform, source string) error {
+	area, err := ass.LookupSafeArea(platform)
+	if err != nil {
+		return ctxerrors.Wrap(err, "choose safe area")
+	}
+	document, err := c.read(source)
+	if err != nil {
+		return ctxerrors.Wrap(err, "load ASS file")
+	}
+	issues, err := document.CheckSafeArea(area)
+	if err != nil {
+		return ctxerrors.Wrap(err, "check safe area")
+	}
+	if issues == nil {
+		issues = []ass.SafeAreaIssue{}
+	}
+	if err := writeJSON(c.output, issues); err != nil {
+		return ctxerrors.Wrap(err, "print safe area issues")
+	}
+	if len(issues) > 0 {
+		return ctxerrors.Wrapf(commerr.ErrValidationFailed, "%d placement(s) reach outside the %s safe area", len(issues), area.Name)
+	}
+
+	return nil
+}
+
+func (c cli) safeAreas(showJSON bool) error {
+	areas := ass.SafeAreas()
+	if showJSON {
+		if err := writeJSON(c.output, areas); err != nil {
+			return ctxerrors.Wrap(err, "print safe areas")
+		}
+
+		return nil
+	}
+	for _, area := range areas {
+		if err := writeString(c.output, area.Name+"\n"); err != nil {
+			return ctxerrors.Wrap(err, "list safe areas")
 		}
 	}
 

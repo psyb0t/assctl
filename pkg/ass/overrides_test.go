@@ -49,7 +49,25 @@ func TestOverrideRejectsBadValues(t *testing.T) {
 		{name: "NaN blur", override: Override{Blur: new(math.NaN())}},
 		{name: "infinite size", override: Override{FontSize: new(math.Inf(1))}},
 		{name: "reversed transform", override: Override{Transform: []Transform{
-			{Start: time.Second, Override: &Override{Blur: new(1.0)}},
+			{Start: 2 * time.Second, End: time.Second, Override: &Override{Blur: new(1.0)}},
+		}}},
+		{name: "negative transform start", override: Override{Transform: []Transform{
+			{Start: -time.Second, End: time.Second, Override: &Override{Blur: new(1.0)}},
+		}}},
+		{name: "negative transform start without an end", override: Override{Transform: []Transform{
+			{Start: -time.Second, Override: &Override{Blur: new(1.0)}},
+		}}},
+		{name: "negative transform end", override: Override{Transform: []Transform{
+			{Start: -2 * time.Second, End: -time.Second, Override: &Override{Blur: new(1.0)}},
+		}}},
+		{name: "NaN acceleration", override: Override{Transform: []Transform{
+			{End: time.Second, Accel: math.NaN(), Override: &Override{Blur: new(1.0)}},
+		}}},
+		{name: "reset scale inside a transform", override: Override{Transform: []Transform{
+			{End: time.Second, Override: &Override{ResetScale: true}},
+		}}},
+		{name: "reset scale beside other tags inside a transform", override: Override{Transform: []Transform{
+			{End: time.Second, Override: &Override{ResetScale: true, Blur: new(1.0)}},
 		}}},
 		{name: "negative acceleration", override: Override{Transform: []Transform{
 			{End: time.Second, Accel: -1, Override: &Override{Blur: new(1.0)}},
@@ -63,6 +81,84 @@ func TestOverrideRejectsBadValues(t *testing.T) {
 			got, err := tc.override.Tags()
 			require.ErrorIs(t, err, commerr.ErrInvalidValue)
 			assert.Empty(t, got)
+		})
+	}
+}
+
+func TestOverrideResetScale(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		override Override
+		want     string
+	}{
+		{name: "alone", override: Override{ResetScale: true}, want: `{\fsc}`},
+		{name: "off by default", override: Override{Blur: new(1.0)}, want: `{\blur1}`},
+		{name: "after a style reset", override: Override{ResetStyle: new("Default"), ResetScale: true}, want: `{\rDefault\fsc}`},
+		{name: "after an empty style reset", override: Override{ResetStyle: new(""), ResetScale: true}, want: `{\r\fsc}`},
+		{
+			name:     "before the position and number tags",
+			override: Override{ResetScale: true, Alignment: AlignmentTopCenter.Ptr(), ScaleX: new(150.0)},
+			want:     `{\fsc\an8\fscx150}`,
+		},
+		{
+			name:     "a reset then a scale",
+			override: Override{ResetStyle: new("Alt"), ResetScale: true, ScaleY: new(80.0), Bold: new(true)},
+			want:     `{\rAlt\fsc\b1\fscy80}`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := tc.override.Tags()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestTransformEndZeroRunsUntilTheEventEnds(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		transform Transform
+		want      string
+	}{
+		{name: "from the event start", transform: Transform{Override: &Override{Blur: new(1.5)}}, want: `{\t(0,0,1,\blur1.5)}`},
+		{
+			name:      "from a later start",
+			transform: Transform{Start: 1500 * time.Millisecond, Override: &Override{Blur: new(2.0)}},
+			want:      `{\t(1500,0,1,\blur2)}`,
+		},
+		{
+			name:      "with acceleration",
+			transform: Transform{Start: time.Second, Accel: 0.5, Override: &Override{ScaleX: new(120.0)}},
+			want:      `{\t(1000,0,0.5,\fscx120)}`,
+		},
+		{
+			name:      "an explicit end after the start",
+			transform: Transform{Start: time.Second, End: 2 * time.Second, Override: &Override{Blur: new(1.0)}},
+			want:      `{\t(1000,2000,1,\blur1)}`,
+		},
+		{
+			name:      "an end equal to the start",
+			transform: Transform{Start: time.Second, End: time.Second, Override: &Override{Blur: new(1.0)}},
+			want:      `{\t(1000,1000,1,\blur1)}`,
+		},
+		{name: "an empty override writes nothing", transform: Transform{Start: time.Second, Override: &Override{}}, want: ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := (&Override{Transform: []Transform{tc.transform}}).Tags()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
 		})
 	}
 }

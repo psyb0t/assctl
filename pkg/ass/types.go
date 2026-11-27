@@ -88,7 +88,11 @@ type BorderStyle int
 
 const (
 	BorderStyleOutlineDropShadow BorderStyle = 1
-	BorderStyleOpaqueBox         BorderStyle = 3
+	// BorderStyleOpaqueBox draws a box behind each line, colored by OutlineColor.
+	BorderStyleOpaqueBox BorderStyle = 3
+	// BorderStyleEventBox is a libass extension: one box behind the whole event,
+	// colored by ShadowColor and padded by Shadow. VSFilter draws it as style 1.
+	BorderStyleEventBox BorderStyle = 4
 )
 
 // Ptr returns a pointer to a copy of b, for optional fields.
@@ -100,6 +104,9 @@ func (b BorderStyle) Ptr() *BorderStyle {
 type Encoding int
 
 const (
+	// EncodingAuto is a libass extension that detects the text direction, for
+	// right-to-left and mixed text. VSFilter rejects it.
+	EncodingAuto       Encoding = -1
 	EncodingANSI       Encoding = 0
 	EncodingDefault    Encoding = 1
 	EncodingSymbol     Encoding = 2
@@ -133,18 +140,9 @@ func (b BoldWeight) Ptr() *BoldWeight {
 	return &b
 }
 
-// Effect represents predefined special effects
+// Effect is an event transition. Build one with BannerEffect or ScrollEffect.
+// An empty Effect has no transition.
 type Effect string
-
-const (
-	EffectKaraoke     Effect = "Karaoke"
-	EffectScroll      Effect = "Scroll"
-	EffectBanner      Effect = "Banner"
-	EffectScrollUp    Effect = "Scroll up"
-	EffectScrollDown  Effect = "Scroll down"
-	EffectScrollLeft  Effect = "Scroll left"
-	EffectScrollRight Effect = "Scroll right"
-)
 
 // Ptr returns a pointer to a copy of e, for optional fields.
 func (e Effect) Ptr() *Effect {
@@ -277,6 +275,7 @@ type Override struct {
 	Transform       []Transform // Transform animations
 	Clip            *Clip       // Clipping rectangle
 	WrapStyle       *WrapStyle  // Wrap style override
+	ResetScale      bool        // \fsc: restore the style's horizontal and vertical scale
 }
 
 // Position is a point in script coordinates.
@@ -306,7 +305,8 @@ type Fade struct {
 	T4 time.Duration
 }
 
-// Transform animates Override from Start to End. Accel zero selects linear timing.
+// Transform animates Override from Start to End, relative to the event start.
+// End zero runs it until the event ends. Accel zero selects linear timing.
 type Transform struct {
 	Start    time.Duration
 	End      time.Duration
@@ -333,6 +333,21 @@ type Script struct {
 	}
 	Styles []Style
 	Events []Event
+	// Kerning writes the libass Kerning header, which turns on font kerning.
+	Kerning bool
+	// Language writes the libass Language header, an ISO 639-1 code such as "en",
+	// which selects language-specific glyph variants.
+	Language string
+	// Fonts are embedded in the script's [Fonts] section, so a renderer that
+	// reads embedded fonts needs no installed copy.
+	Fonts []EmbeddedFont
+}
+
+// EmbeddedFont is a font file stored inside the script. Name is the file name,
+// such as "DejaVuSans.ttf".
+type EmbeddedFont struct {
+	Name string
+	Data []byte
 }
 
 // KaraokeMode selects the karaoke highlight effect.

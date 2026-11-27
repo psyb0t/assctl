@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"time"
 
 	"github.com/psyb0t/ctxerrors/commerr"
 	"github.com/stretchr/testify/assert"
@@ -390,4 +391,378 @@ func TestCLIJSONRejectsAmbiguousObjects(t *testing.T) {
 			_ = runCLIFailure(t, tc.input, "tags")
 		})
 	}
+}
+
+const (
+	safeAreaWidth  = 1080
+	safeAreaHeight = 1920
+
+	platformTikTok = "tiktok"
+	platformShorts = "shorts"
+	platformReels  = "reels"
+)
+
+var allPlatforms = []string{ass.SafeAreaAll, platformTikTok, platformShorts, platformReels}
+
+type safeAreaMargins struct{ left, right, vertical int }
+
+// scriptSpec drops ass.Script's text marshaling so it encodes as the JSON spec object.
+type scriptSpec ass.Script
+
+func runCLIOutput(t *testing.T, input string, args ...string) (string, error) {
+	t.Helper()
+
+	var output bytes.Buffer
+	err := run(args, strings.NewReader(input), &output, io.Discard)
+
+	return output.String(), err
+}
+
+// writeSafeAreaScript writes a 1080 x 1920 script with one style and returns its path.
+func writeSafeAreaScript(
+	t *testing.T,
+	directory, name string,
+	alignment ass.Alignment,
+	margins safeAreaMargins,
+	events ...ass.Event,
+) string {
+	t.Helper()
+
+	script := ass.Script{
+		Title: "Safe area",
+		Styles: []ass.Style{{
+			Name: "Default", FontName: "DejaVu Sans", Alignment: alignment,
+			MarginL: margins.left, MarginR: margins.right, MarginV: margins.vertical,
+		}},
+		Events: events,
+	}
+	script.Resolution.Width, script.Resolution.Height = safeAreaWidth, safeAreaHeight
+	if len(script.Events) == 0 {
+		script.Events = []ass.Event{{Style: "Default", End: time.Second, Text: "Hello"}}
+	}
+	spec, err := json.Marshal(scriptSpec(script))
+	require.NoError(t, err)
+
+	path := filepath.Join(directory, name+".ass")
+	runCLI(t, string(spec), "create", "--output", path)
+
+	return path
+}
+
+func decodeIssues(t *testing.T, output string) []ass.SafeAreaIssue {
+	t.Helper()
+
+	var issues []ass.SafeAreaIssue
+	require.NoError(t, json.Unmarshal([]byte(output), &issues), output)
+
+	return issues
+}
+
+func TestCLISafeAreaPlatforms(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	testCases := []struct {
+		name      string
+		margins   safeAreaMargins
+		wantClean []string
+	}{
+		{name: "clears every platform", margins: safeAreaMargins{120, 300, 700}, wantClean: allPlatforms},
+		{name: "clears TikTok only", margins: safeAreaMargins{120, 300, 660}, wantClean: []string{platformTikTok}},
+		{name: "clears Shorts only", margins: safeAreaMargins{48, 192, 700}, wantClean: []string{platformShorts}},
+		{name: "clears Reels only", margins: safeAreaMargins{65, 65, 700}, wantClean: []string{platformReels}},
+		{name: "no margins"},
+	}
+
+	for _, tc := range testCases {
+		path := writeSafeAreaScript(t, directory, tc.name, ass.AlignmentBottomCenter, tc.margins)
+		for _, platform := range allPlatforms {
+			t.Run(tc.name+"/"+platform, func(t *testing.T) {
+				t.Parallel()
+
+				output, err := runCLIOutput(t, "", "safe-area", "--platform", platform, path)
+				if slices.Contains(tc.wantClean, platform) {
+					require.NoError(t, err)
+					assert.Equal(t, "[]\n", output)
+
+					return
+				}
+				require.ErrorIs(t, err, commerr.ErrValidationFailed)
+				issues := decodeIssues(t, output)
+				require.NotEmpty(t, issues)
+				for _, issue := range issues {
+					assert.Equal(t, "Default", issue.Style)
+					assert.Zero(t, issue.Event)
+					assert.Less(t, issue.Margin, issue.Required)
+				}
+			})
+		}
+	}
+}
+
+func TestCLISafeAreaDefaultsToAll(t *testing.T) {
+	t.Parallel()
+
+	path := writeSafeAreaScript(t, t.TempDir(), "defaults", ass.AlignmentBottomCenter, safeAreaMargins{})
+
+	implicit, implicitErr := runCLIOutput(t, "", "safe-area", path)
+	explicit, explicitErr := runCLIOutput(t, "", "safe-area", "--platform", ass.SafeAreaAll, path)
+	require.ErrorIs(t, implicitErr, commerr.ErrValidationFailed)
+	require.ErrorIs(t, explicitErr, commerr.ErrValidationFailed)
+	assert.Equal(t, explicit, implicit)
+}
+
+func TestCLISafeAreaIssues(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	testCases := []struct {
+		name      string
+		alignment ass.Alignment
+		platform  string
+		want      []ass.SafeAreaIssue
+	}{
+		{
+			name: "bottom all", alignment: ass.AlignmentBottomCenter, platform: ass.SafeAreaAll,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeBottom, Required: 672},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 120},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 300},
+			},
+		},
+		{
+			name: "bottom tiktok", alignment: ass.AlignmentBottomCenter, platform: platformTikTok,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeBottom, Required: 660},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 120},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 300},
+			},
+		},
+		{
+			name: "bottom shorts", alignment: ass.AlignmentBottomCenter, platform: platformShorts,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeBottom, Required: 672},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 48},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 192},
+			},
+		},
+		{
+			name: "bottom reels", alignment: ass.AlignmentBottomCenter, platform: platformReels,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeBottom, Required: 672},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 65},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 65},
+			},
+		},
+		{
+			name: "top all", alignment: ass.AlignmentTopCenter, platform: ass.SafeAreaAll,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeTop, Required: 288},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 120},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 192},
+			},
+		},
+		{
+			name: "top tiktok", alignment: ass.AlignmentTopCenter, platform: platformTikTok,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeTop, Required: 240},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 120},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 120},
+			},
+		},
+		{
+			name: "top shorts", alignment: ass.AlignmentTopCenter, platform: platformShorts,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeTop, Required: 288},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 48},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 192},
+			},
+		},
+		{
+			name: "top reels", alignment: ass.AlignmentTopCenter, platform: platformReels,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeTop, Required: 269},
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 65},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 65},
+			},
+		},
+		{
+			name: "middle all uses the lower right edge", alignment: ass.AlignmentMiddleCenter, platform: ass.SafeAreaAll,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 120},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 300},
+			},
+		},
+		{
+			name: "middle shorts keeps the upper right edge", alignment: ass.AlignmentMiddleCenter, platform: platformShorts,
+			want: []ass.SafeAreaIssue{
+				{Style: "Default", Edge: ass.EdgeLeft, Required: 48},
+				{Style: "Default", Edge: ass.EdgeRight, Required: 192},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		path := writeSafeAreaScript(t, directory, tc.name, tc.alignment, safeAreaMargins{})
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			output, err := runCLIOutput(t, "", "safe-area", "--platform", tc.platform, path)
+			require.ErrorIs(t, err, commerr.ErrValidationFailed)
+			assert.Equal(t, tc.want, decodeIssues(t, output))
+		})
+	}
+}
+
+func TestCLISafeAreaJSONShape(t *testing.T) {
+	t.Parallel()
+
+	path := writeSafeAreaScript(t, t.TempDir(), "shape", ass.AlignmentBottomCenter, safeAreaMargins{120, 300, 100})
+
+	output, err := runCLIOutput(t, "", "safe-area", path)
+	require.ErrorIs(t, err, commerr.ErrValidationFailed)
+	assert.Contains(t, err.Error(), "1 placement(s)")
+
+	var raw []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(output), &raw))
+	require.Len(t, raw, 1)
+	assert.Equal(t, map[string]any{
+		"Style": "Default", "Event": float64(0), "Edge": "bottom", "Margin": float64(100), "Required": float64(672),
+	}, raw[0])
+}
+
+func TestCLISafeAreaEventMargins(t *testing.T) {
+	t.Parallel()
+
+	path := writeSafeAreaScript(
+		t, t.TempDir(), "events", ass.AlignmentBottomCenter, safeAreaMargins{120, 300, 700},
+		ass.Event{Style: "Default", End: time.Second, Text: "inherits the style"},
+		ass.Event{Style: "Default", End: time.Second, MarginL: 10, Text: "narrow left"},
+		ass.Event{Style: "Default", End: time.Second, MarginV: 100, Text: "low"},
+		ass.Event{Style: "Default", End: time.Second, MarginL: 200, MarginR: 400, MarginV: 800, Text: "safe"},
+	)
+
+	output, err := runCLIOutput(t, "", "safe-area", path)
+	require.ErrorIs(t, err, commerr.ErrValidationFailed)
+	assert.Equal(t, []ass.SafeAreaIssue{
+		{Style: "Default", Event: 2, Edge: ass.EdgeLeft, Margin: 10, Required: 120},
+		{Style: "Default", Event: 3, Edge: ass.EdgeBottom, Margin: 100, Required: 672},
+	}, decodeIssues(t, output))
+}
+
+func TestCLISafeAreaReadsStdin(t *testing.T) {
+	t.Parallel()
+
+	path := writeSafeAreaScript(t, t.TempDir(), "stdin", ass.AlignmentBottomCenter, safeAreaMargins{120, 300, 700})
+	text, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	assert.Equal(t, "[]\n", runCLI(t, string(text), "safe-area", "-"))
+}
+
+func TestCLITextPositionsClearSafeArea(t *testing.T) {
+	t.Parallel()
+
+	for _, position := range ass.TextPositions() {
+		t.Run(position.Name, func(t *testing.T) {
+			t.Parallel()
+
+			spec := `{"Width":1080,"Height":1920,"Dialogues":[{"End":1000000000,"Text":"Hello"}]}`
+			text := runCLI(t, spec, "captions", "--text-position", position.Name)
+			assert.Equal(t, "[]\n", runCLI(t, text, "safe-area", "-"))
+		})
+	}
+}
+
+func TestCLISafeAreaFailures(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	valid := writeSafeAreaScript(t, directory, "valid", ass.AlignmentBottomCenter, safeAreaMargins{120, 300, 700})
+	text, err := os.ReadFile(valid)
+	require.NoError(t, err)
+	badMargin := strings.Replace(string(text), ",120,300,700,", ",abc,300,700,", 1)
+	require.NotEqual(t, string(text), badMargin, "fixture margin was not replaced")
+
+	testCases := []struct {
+		name  string
+		args  []string
+		input string
+		want  error
+	}{
+		{name: "unknown platform", args: []string{"safe-area", "--platform", "missing", valid}, want: commerr.ErrNotFound},
+		{name: "unknown platform before input", args: []string{"safe-area", "--platform", "missing", "-"}, want: commerr.ErrNotFound},
+		{name: "platform names are case sensitive", args: []string{"safe-area", "--platform", "TikTok", valid}, want: commerr.ErrNotFound},
+		{name: "empty platform", args: []string{"safe-area", "--platform", "", valid}, want: commerr.ErrNotFound},
+		{name: "missing input", args: []string{"safe-area", filepath.Join(directory, "absent.ass")}, want: fs.ErrNotExist},
+		{name: "no input argument", args: []string{"safe-area"}, want: commerr.ErrInvalidArgument},
+		{name: "extra input argument", args: []string{"safe-area", valid, valid}, want: commerr.ErrInvalidArgument},
+		{name: "input is not ASS", args: []string{"safe-area", "-"}, input: "bad source", want: ass.ErrInvalidDocument},
+		{name: "margin is not a number", args: []string{"safe-area", "-"}, input: badMargin, want: commerr.ErrInvalidValue},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := runCLIFailure(t, tc.input, tc.args...)
+			require.ErrorIs(t, err, tc.want)
+		})
+	}
+}
+
+func TestCLISafeAreaOutputFailure(t *testing.T) {
+	t.Parallel()
+
+	path := writeSafeAreaScript(t, t.TempDir(), "clean", ass.AlignmentBottomCenter, safeAreaMargins{120, 300, 700})
+	broken := writeSafeAreaScript(t, t.TempDir(), "broken", ass.AlignmentBottomCenter, safeAreaMargins{})
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{name: "clean file", path: path},
+		{name: "failing file", path: broken},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := run([]string{"safe-area", tc.path}, strings.NewReader(""), errorOutput{}, io.Discard)
+			require.ErrorIs(t, err, io.ErrClosedPipe)
+		})
+	}
+}
+
+func TestCLISafeAreas(t *testing.T) {
+	t.Parallel()
+
+	t.Run("names", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, allPlatforms, strings.Fields(runCLI(t, "", "safe-areas")))
+	})
+
+	t.Run("JSON", func(t *testing.T) {
+		t.Parallel()
+
+		var areas []ass.SafeArea
+		require.NoError(t, json.Unmarshal([]byte(runCLI(t, "", "safe-areas", "--json")), &areas))
+		assert.Equal(t, ass.SafeAreas(), areas)
+		require.Len(t, areas, len(allPlatforms))
+		for _, area := range areas {
+			assert.Positive(t, area.TopRatio, area.Name)
+			assert.Positive(t, area.BottomRatio, area.Name)
+			assert.Positive(t, area.LeftRatio, area.Name)
+			assert.Positive(t, area.RightRatio, area.Name)
+		}
+	})
+
+	t.Run("extra argument", func(t *testing.T) {
+		t.Parallel()
+
+		err := runCLIFailure(t, "", "safe-areas", "extra")
+		require.ErrorIs(t, err, commerr.ErrInvalidArgument)
+	})
 }

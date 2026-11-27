@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"regexp"
 	"slices"
@@ -17,6 +18,8 @@ import (
 )
 
 const (
+	numberPrecision  = 1000
+	pixelTolerance   = 1e-9
 	standardScale    = 100
 	outputMode       = 0o600
 	shortHexRGBLen   = 3
@@ -44,8 +47,13 @@ var (
 		columnMarginL, columnMarginR, columnMarginV, columnEffect, columnText,
 	}
 	// Script Info keys set through typed Script fields, which custom headers may not repeat.
-	typedHeaders = []string{infoTitle, infoScriptType, infoPlayResX, infoPlayResY}
+	typedHeaders = []string{infoTitle, infoScriptType, infoPlayResX, infoPlayResY, infoKerning, infoLanguage}
+	languageCode = regexp.MustCompile("^[a-z]{2}$")
 )
+
+// borderStyles are the accepted Style.BorderStyle values. Zero is the unset
+// value, which renderers draw as an outline and drop shadow.
+var borderStyles = []BorderStyle{0, BorderStyleOutlineDropShadow, BorderStyleOpaqueBox, BorderStyleEventBox}
 
 type scriptHeader struct{ name, value string }
 
@@ -116,7 +124,17 @@ func hexValue(value string) string {
 
 func integer(value int) string { return strconv.Itoa(value) }
 
-func number(value float64) string { return strconv.FormatFloat(value, 'f', -1, 64) }
+// number writes value with at most three decimals, so ratio arithmetic such as
+// 1920 * 0.045 prints as 86.4 rather than 86.39999999999999.
+func number(value float64) string {
+	rounded := math.Round(value*numberPrecision) / numberPrecision
+	if rounded == 0 {
+		// Rounding a small negative value gives negative zero, which prints as "-0".
+		rounded = 0
+	}
+
+	return strconv.FormatFloat(rounded, 'f', -1, 64)
+}
 
 func styleBoolean(value bool) string {
 	if value {
@@ -135,6 +153,9 @@ func styleFields(style Style) ([]string, error) {
 	}
 	if style.MarginL < 0 || style.MarginR < 0 || style.MarginV < 0 || style.WrapStyle < WrapStyleSmartTop || style.WrapStyle > WrapStyleSmartBottom {
 		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "invalid style margins or wrapping")
+	}
+	if !slices.Contains(borderStyles, style.BorderStyle) || style.Encoding < EncodingAuto {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "border style must be 0, 1, 3 or 4 and encoding at least -1")
 	}
 	if strings.TrimSpace(style.Name) == "" || strings.TrimSpace(style.FontName) == "" ||
 		strings.ContainsAny(style.Name+style.FontName, fieldDelimiters) {
@@ -215,7 +236,21 @@ func (s Script) MarshalText() ([]byte, error) {
 		return nil, ctxerrors.Wrap(err, "write script headers")
 	}
 
+	if s.Language != "" && !languageCode.MatchString(s.Language) {
+		return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "language %q is not a lowercase ISO 639-1 code", s.Language)
+	}
+	fonts, err := fontLines(s.Fonts)
+	if err != nil {
+		return nil, ctxerrors.Wrap(err, "embed fonts")
+	}
+
 	lines := []string{headerScriptInfo, infoTitle + headerSeparator + s.Title, infoScriptType + headerSeparator + scriptTypeV4Plus}
+	if s.Kerning {
+		lines = append(lines, infoKerning+headerSeparator+headerYes)
+	}
+	if s.Language != "" {
+		lines = append(lines, infoLanguage+headerSeparator+s.Language)
+	}
 	for _, key := range slices.Sorted(maps.Keys(headers)) {
 		lines = append(lines, headers[key].name+headerSeparator+headers[key].value)
 	}
@@ -238,6 +273,10 @@ func (s Script) MarshalText() ([]byte, error) {
 		lines = append(lines, recordStyle+headerSeparator+strings.Join(fields, fieldSeparator))
 	}
 
+	if len(fonts) > 0 {
+		lines = append(lines, "", headerFonts)
+		lines = append(lines, fonts...)
+	}
 	lines = append(lines, "", headerEvents, recordFormat+headerSeparator+strings.Join(eventColumns, formatSeparator))
 	for index, event := range s.Events {
 		wrap, exists := styles[event.Style]
@@ -266,7 +305,7 @@ func (s Script) MarshalText() ([]byte, error) {
 // infoHeaders returns the generated default headers merged with s.Info, keyed by lowercase name.
 func (s Script) infoHeaders() (map[string]scriptHeader, error) {
 	headers := map[string]scriptHeader{
-		strings.ToLower(infoScaledBorderAndShadow): {name: infoScaledBorderAndShadow, value: scaledBorderOn},
+		strings.ToLower(infoScaledBorderAndShadow): {name: infoScaledBorderAndShadow, value: headerYes},
 		strings.ToLower(infoYCbCrMatrix):           {name: infoYCbCrMatrix, value: ycbcrMatrixNone},
 	}
 	seen := make(map[string]bool, len(s.Info))

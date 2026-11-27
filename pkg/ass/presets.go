@@ -16,7 +16,7 @@ const (
 )
 
 const (
-	inlineASSChars      = "{\\"
+	assEscape           = "\\"
 	textStyleName       = "Text"
 	backgroundStyleName = "Background"
 	wordSeparator       = " "
@@ -31,7 +31,8 @@ var themeColumns = []string{
 	columnBackColour, columnBold, columnBorderStyle, columnOutline, columnShadow, columnAlignment, columnMarginV,
 }
 
-// Preset sets the complete look of a subtitle style. Ratios are relative to script height.
+// Preset sets the complete look of a subtitle style. FontRatio and MarginRatio
+// are fractions of the script height; the side margin ratios are fractions of its width.
 type Preset struct {
 	Name            string
 	Font            string
@@ -43,11 +44,13 @@ type Preset struct {
 	FontRatio       float64
 	MarginRatio     float64
 	SideMarginRatio float64
-	Outline         float64
-	Shadow          float64
-	Padding         float64
-	Bold            bool
-	Alignment       Alignment
+	// RightMarginRatio replaces SideMarginRatio on the right when it is set.
+	RightMarginRatio float64
+	Outline          float64
+	Shadow           float64
+	Padding          float64
+	Bold             bool
+	Alignment        Alignment
 }
 
 func presets() []Preset {
@@ -79,43 +82,43 @@ func presets() []Preset {
 		{
 			Name: "tiktok-bold", Font: FontTikTokSans, Text: ColorWhite, Highlight: colorCaptionYellow,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 4, Shadow: 0, Bold: true, Alignment: AlignmentBottomCenter,
 		},
 		{
 			Name: "reels-bold", Font: FontBarlowCondensedExtraBold, Text: ColorWhite, Highlight: colorCaptionYellow,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.048, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.048, MarginRatio: socialLowerMarginRatio, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 4, Shadow: 0, Alignment: AlignmentBottomCenter,
 		},
 		{
 			Name: "shorts-impact", Font: FontAnton, Text: colorCaptionYellow, Highlight: ColorWhite,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.045, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.045, MarginRatio: socialLowerMarginRatio, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 4, Shadow: 0, Alignment: AlignmentBottomCenter,
 		},
 		{
 			Name: "social-center", Font: FontAnton, Text: ColorWhite, Highlight: colorCaptionYellow,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.045, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.045, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 4, Shadow: 0, Alignment: AlignmentMiddleCenter,
 		},
 		{
 			Name: "social-box", Font: FontTikTokSans, Text: ColorWhite, Highlight: colorCaptionYellow,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: alphaLightBox,
-			FontRatio: 0.04, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.04, MarginRatio: socialLowerMarginRatio, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 2, Shadow: 0, Padding: 8, Bold: true, Alignment: AlignmentBottomCenter,
 		},
 		{
 			Name: "social-hook", Font: FontBarlowCondensedExtraBold, Text: colorCaptionYellow, Highlight: ColorWhite,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.05, MarginRatio: socialUpperMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.05, MarginRatio: socialUpperMarginRatio, SideMarginRatio: socialUpperSideRatio,
 			Outline: 4, Shadow: 0, Alignment: AlignmentTopCenter,
 		},
 		{
 			Name: "the-bold", Font: FontTheBold, Text: ColorWhite, Highlight: colorCaptionYellow,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
-			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: safeLeftRatio, RightMarginRatio: safeLowerRightRatio,
 			Outline: 4, Shadow: 0, Bold: true, Alignment: AlignmentBottomCenter,
 		},
 	}
@@ -142,9 +145,17 @@ func (p Preset) foreground(name string, width, height int) Style {
 		ShadowColor: p.Background, ShadowAlpha: p.BackgroundAlpha, Bold: p.Bold,
 		ScaleX: standardScale, ScaleY: standardScale, BorderStyle: BorderStyleOutlineDropShadow,
 		Outline: p.Outline, Shadow: p.Shadow, Alignment: p.Alignment,
-		MarginV: int(float64(height) * p.MarginRatio), Encoding: EncodingDefault,
-		MarginL: int(float64(width) * p.SideMarginRatio), MarginR: int(float64(width) * p.SideMarginRatio),
+		MarginV: scaled(height, p.MarginRatio), Encoding: EncodingDefault,
+		MarginL: scaled(width, p.SideMarginRatio), MarginR: scaled(width, p.rightMarginRatio()),
 	}
+}
+
+func (p Preset) rightMarginRatio() float64 {
+	if p.RightMarginRatio != 0 {
+		return p.RightMarginRatio
+	}
+
+	return p.SideMarginRatio
 }
 
 func (p Preset) box(style Style) Style {
@@ -176,7 +187,7 @@ func (d *Document) Theme(preset Preset, name string) (*Document, error) {
 			return nil, ctxerrors.Wrap(err, "render theme style")
 		}
 		columns := themeColumns
-		if preset.SideMarginRatio != 0 {
+		if preset.SideMarginRatio != 0 || preset.RightMarginRatio != 0 {
 			columns = append(slices.Clone(themeColumns), columnMarginL, columnMarginR)
 		}
 		fields := make(map[string]string, len(columns))
@@ -221,11 +232,12 @@ func (p Preset) Captions(spec CaptionSpec) Script {
 	}
 	for _, dialogue := range spec.Dialogues {
 		line := dialogue.Text
-		if !strings.ContainsAny(line, inlineASSChars) {
+		// Text with a backslash already holds ASS tags or line breaks and is kept as written.
+		if !strings.Contains(line, assEscape) {
 			if spec.Uppercase {
 				line = strings.ToUpper(line)
 			}
-			line = wrapWords(line, spec.WordsPerLine)
+			line = EscapeText(wrapWords(line, spec.WordsPerLine))
 		}
 		event := Event{Start: dialogue.Start, End: dialogue.End, Text: line, Style: text.Name}
 		if boxVisible {

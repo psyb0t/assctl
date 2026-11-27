@@ -13,7 +13,7 @@ assctl version
 assctl fonts-install
 ```
 
-Go puts the executable in `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Add that directory to your shell's `PATH` if needed. The font command installs the built-in presets' required DejaVu fonts for your user.
+Go puts the executable in `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Add that directory to your shell's `PATH` if needed. The font command installs the fonts every built-in preset needs for your user.
 
 With an existing ASS file, run:
 

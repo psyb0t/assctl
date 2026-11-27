@@ -833,3 +833,107 @@ func TestWriteFont(t *testing.T) {
 		assert.Empty(t, entryNames(t, directory))
 	})
 }
+
+func TestFontFilesForBuiltInPresets(t *testing.T) {
+	t.Parallel()
+
+	for _, preset := range ass.Presets() {
+		t.Run(preset.Name, func(t *testing.T) {
+			t.Parallel()
+
+			want, err := builtInFonts.source(preset)
+			require.NoError(t, err)
+
+			got, err := FontFiles([]ass.Preset{preset})
+			require.NoError(t, err)
+			assert.Equal(t, []string{want.font.name}, got)
+			assert.NotEqual(t, want.license.name, got[0], "license file listed as a font")
+		})
+	}
+
+	t.Run("all presets together", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := FontFiles(ass.Presets())
+		require.NoError(t, err)
+		require.NotEmpty(t, got)
+		assert.Len(t, uniqueNames(got), len(got), "font files repeat: %v", got)
+		for _, name := range got {
+			assert.Equal(t, ".ttf", filepath.Ext(name))
+		}
+	})
+}
+
+func uniqueNames(names []string) map[string]bool {
+	unique := make(map[string]bool, len(names))
+	for _, name := range names {
+		unique[name] = true
+	}
+
+	return unique
+}
+
+func TestFontFiles(t *testing.T) {
+	t.Parallel()
+
+	anton := ass.Preset{Name: "a", Font: ass.FontAnton}
+	serif := ass.Preset{Name: "b", Font: ass.FontDejaVuSerif}
+	sans := ass.Preset{Name: "c", Font: ass.FontDejaVuSans}
+	boldSans := ass.Preset{Name: "d", Font: ass.FontDejaVuSans, Bold: true}
+
+	testCases := []struct {
+		name    string
+		presets []ass.Preset
+		want    []string
+		wantErr error
+	}{
+		{name: "nil presets"},
+		{name: "empty presets", presets: []ass.Preset{}},
+		{name: "regular DejaVu Sans", presets: []ass.Preset{sans}, want: []string{"DejaVuSans.ttf"}},
+		{name: "bold DejaVu Sans", presets: []ass.Preset{boldSans}, want: []string{"DejaVuSans-Bold.ttf"}},
+		{
+			name:    "regular and bold DejaVu Sans are separate files",
+			presets: []ass.Preset{sans, boldSans},
+			want:    []string{"DejaVuSans.ttf", "DejaVuSans-Bold.ttf"},
+		},
+		{
+			name:    "first-seen order",
+			presets: []ass.Preset{serif, anton, sans},
+			want:    []string{"DejaVuSerif.ttf", "Anton-Regular.ttf", "DejaVuSans.ttf"},
+		},
+		{name: "same preset twice", presets: []ass.Preset{anton, anton}, want: []string{"Anton-Regular.ttf"}},
+		{
+			name:    "different presets sharing a font",
+			presets: []ass.Preset{anton, {Name: "other", Font: ass.FontAnton, Bold: true}},
+			want:    []string{"Anton-Regular.ttf"},
+		},
+		{
+			name:    "duplicate keeps the first position",
+			presets: []ass.Preset{serif, anton, serif},
+			want:    []string{"DejaVuSerif.ttf", "Anton-Regular.ttf"},
+		},
+		{name: "unknown family", presets: []ass.Preset{{Name: "x", Font: "Unknown"}}, wantErr: commerr.ErrUnsupported},
+		{name: "empty family", presets: []ass.Preset{{Name: "x"}}, wantErr: commerr.ErrUnsupported},
+		{
+			name:    "unknown family after a known one",
+			presets: []ass.Preset{sans, {Name: "x", Font: "Unknown"}},
+			wantErr: commerr.ErrUnsupported,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := FontFiles(tc.presets)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.Nil(t, got)
+
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}

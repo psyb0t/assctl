@@ -55,6 +55,8 @@ Use `Parse` to keep a complete UTF-8 ASS v4+ document, including comments, line 
 
 `Override.Tags` writes a typed override block. A caller can also put ASS tags directly in the event text, including karaoke timing tags. The package preserves those strings when it edits unrelated fields.
 
+`SafeAreas` and `LookupSafeArea` return the TikTok, YouTube Shorts, Instagram Reels and combined safe areas, and `Document.CheckSafeArea` checks a document's margins against one; see [platform safe areas](positions.md#platform-safe-areas). `Script.Fonts` and `Document.EmbedFonts` embed `EmbeddedFont{Name, Data}` font files in the script; see [embedded fonts](ass-features.md#embedded-fonts). `BannerEffect`, `ScrollEffect` and `EscapeText` build event effects and literal text.
+
 `TextPositions` and `LookupTextPosition` expose layouts independently of appearance. Apply them with `Script.WithTextPosition` or `Document.WithTextPosition`. See [text positions](positions.md) and [ASS features](ass-features.md) for geometry, headers, comments, and tag generation.
 
 ## Errors
@@ -63,7 +65,7 @@ Match errors with `errors.Is`:
 
 | Error | Meaning |
 | --- | --- |
-| `commerr.ErrNotFound` | A named preset, text position, style, field or event does not exist. |
+| `commerr.ErrNotFound` | A named preset, text position, safe area, style, field or event does not exist. |
 | `commerr.ErrInvalidValue` | A typed value cannot be written as valid ASS, such as a negative size, a bad color or a header that would break the file. |
 | `ass.ErrInvalidDocument` | Input text is not a usable ASS v4+ document, or `Validate` found a missing style or bad timing. |
 | `ass.ErrInputTooLarge` | `Parse` read more than 64 MiB. |

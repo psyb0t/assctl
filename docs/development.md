@@ -11,7 +11,7 @@ description: Build and test assctl and its Docusaurus documentation in Docker.
 - `make test-unit` excludes render tests; `make test-integration` runs the renderer tests alone. A missing renderer is a test failure.
 - `make test-coverage` runs the complete offline suite, writes the badge percentage, and fails below 90% coverage.
 - `make test-fuzz` fuzzes parser preservation and generated-script round trips with two workers and bounded runtimes. Their regression seeds also run in normal tests.
-- `make test-real` downloads every preset's pinned fonts into temporary user directories, verifies installation, and checks that libass selects the intended font when rendering. It requires upstream network access and checks verified offline reuse afterward. The test sits behind the `real` build tag, so no other target compiles it.
+- `make test-real` downloads every preset's pinned fonts into temporary user directories, verifies installation, checks that libass selects the intended font when rendering, and renders captions made with `--embed-preset-fonts` with no installed fonts. It requires upstream network access and checks verified offline reuse afterward. These tests, in `internal/pkg/fonts` and `cmd/assctl`, sit behind the `real` build tag, so no other target compiles them.
 - `make help` lists the available operations.
 - `make sec` checks for secrets and known Go vulnerabilities. It writes `sec.sarif` for GitHub Code Scanning.
 - `make docs` builds the Docusaurus site and checks internal links. The output is `website/build` under the `/assctl/` URL prefix.

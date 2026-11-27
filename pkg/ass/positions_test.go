@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// marginPixels is ratio of size rounded up to a whole pixel, as margins are.
+func marginPixels(size int, ratio float64) int {
+	return int(math.Ceil(float64(size)*ratio - 1e-9))
+}
+
 func TestPositionsComposeWithEveryTheme(t *testing.T) {
 	t.Parallel()
 
@@ -39,9 +44,9 @@ func TestPositionsComposeWithEveryTheme(t *testing.T) {
 						assert.Equal(t, original.FontName, style.FontName)
 						assert.Equal(t, original.PrimaryColor, style.PrimaryColor)
 						assert.Equal(t, position.Alignment, style.Alignment)
-						assert.Equal(t, int(float64(width)*position.LeftMarginRatio), style.MarginL)
-						assert.Equal(t, int(float64(width)*position.RightMarginRatio), style.MarginR)
-						assert.Equal(t, int(float64(height)*position.MarginRatio), style.MarginV)
+						assert.Equal(t, marginPixels(width, position.LeftMarginRatio), style.MarginL)
+						assert.Equal(t, marginPixels(width, position.RightMarginRatio), style.MarginR)
+						assert.Equal(t, marginPixels(height, position.MarginRatio), style.MarginV)
 					}
 
 					_, err = updated.MarshalText()
@@ -49,6 +54,77 @@ func TestPositionsComposeWithEveryTheme(t *testing.T) {
 					assert.Equal(t, script.Events[0].Text, updated.Events[0].Text)
 				}
 			}
+		})
+	}
+}
+
+func TestTextPositionsKeepSocialButtonColumnClear(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		alignment Alignment
+		left      int
+		right     int
+		vertical  int
+	}{
+		{name: "portrait-upper", alignment: AlignmentTopCenter, left: 195, right: 195, vertical: 346},
+		{name: "portrait-center", alignment: AlignmentMiddleCenter, left: 120, right: 300, vertical: 0},
+		{name: "portrait-lower-middle", alignment: AlignmentBottomCenter, left: 120, right: 300, vertical: 768},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			position, err := LookupTextPosition(tc.name)
+			require.NoError(t, err)
+
+			script := NewScript("Position", 1080, 1920)
+			script.AddStyle(Style{Name: "Default", FontName: FontDejaVuSans})
+			positioned, err := script.WithTextPosition(position)
+			require.NoError(t, err)
+			style := positioned.Styles[0]
+			assert.Equal(t, tc.alignment, style.Alignment)
+			assert.Equal(t, tc.left, style.MarginL)
+			assert.Equal(t, tc.right, style.MarginR)
+			assert.Equal(t, tc.vertical, style.MarginV)
+
+			document, err := Parse(strings.NewReader(fixture(t)))
+			require.NoError(t, err)
+			updated, err := document.WithTextPosition(position, "Default")
+			require.NoError(t, err)
+			fields := updated.Contents().Styles[0]
+			assert.Equal(t, strconv.Itoa(tc.left), fields["MarginL"])
+			assert.Equal(t, strconv.Itoa(tc.right), fields["MarginR"])
+			assert.Equal(t, strconv.Itoa(tc.vertical), fields["MarginV"])
+		})
+	}
+}
+
+func TestTextPositionRoundsMarginsUpToWholePixels(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		size  int
+		ratio float64
+		want  int
+	}{
+		{name: "rounds up below half", size: 1000, ratio: 0.1004, want: 101},
+		{name: "rounds up from half", size: 1000, ratio: 0.1005, want: 101},
+		{name: "rounds up above half", size: 960, ratio: 0.18, want: 173},
+		{name: "exact product", size: 960, ratio: 0.4, want: 384},
+		{name: "ignores floating point noise", size: 1080, ratio: 120.0 / 1080, want: 120},
+		{name: "one pixel past a whole number", size: 1084, ratio: 120.0 / 1080, want: 121},
+		{name: "zero ratio", size: 960, ratio: 0, want: 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tc.want, scaled(tc.size, tc.ratio))
 		})
 	}
 }
@@ -156,6 +232,15 @@ func TestPositionUsesLibassResolutionInference(t *testing.T) {
 			{name: "legacy wide height only", info: "PlayResY: 1024\n", width: 1280, height: 1024},
 			{name: "width only", info: "PlayResX: 1000\n", width: 1000, height: 750},
 			{name: "height only", info: "PlayResY: 900\n", width: 1200, height: 900},
+			{name: "both zero", info: "PlayResX: 0\nPlayResY: 0\n", width: 384, height: 288},
+			{name: "both negative", info: "PlayResX: -1\nPlayResY: -1\n", width: 384, height: 288},
+			{name: "zero width", info: "PlayResX: 0\nPlayResY: 900\n", width: 1200, height: 900},
+			{name: "negative width", info: "PlayResX: -5\nPlayResY: 900\n", width: 1200, height: 900},
+			{name: "zero height", info: "PlayResX: 1000\nPlayResY: 0\n", width: 1000, height: 750},
+			{name: "negative height", info: "PlayResX: 1000\nPlayResY: -1\n", width: 1000, height: 750},
+			{name: "zero height at the legacy width", info: "PlayResX: 1280\nPlayResY: 0\n", width: 1280, height: 1024},
+			{name: "zero width at the legacy height", info: "PlayResX: 0\nPlayResY: 1024\n", width: 1280, height: 1024},
+			{name: "one pixel wide", info: "PlayResX: 1\nPlayResY: 0\n", width: 1, height: 1},
 		}
 
 		for _, tc := range testCases {
@@ -172,8 +257,18 @@ func TestPositionUsesLibassResolutionInference(t *testing.T) {
 				require.NoError(t, err)
 
 				style := updated.Contents().Styles[0]
-				assert.Equal(t, strconv.Itoa(int(float64(tc.height)*0.4)), style["MarginV"])
-				assert.Equal(t, strconv.Itoa(int(float64(tc.width)*0.18)), style["MarginL"])
+				assert.Equal(t, strconv.Itoa(marginPixels(tc.height, 0.4)), style["MarginV"])
+				assert.Equal(t, strconv.Itoa(marginPixels(tc.width, 120.0/1080)), style["MarginL"])
+				assert.Equal(t, strconv.Itoa(marginPixels(tc.width, 300.0/1080)), style["MarginR"])
+
+				themed, err := document.Theme(Preset{
+					Name: "probe", Font: FontDejaVuSans, FontRatio: 0.1, BackgroundAlpha: AlphaTransparent,
+					Alignment: AlignmentBottomCenter,
+				}, "")
+				require.NoError(t, err)
+				fontSize, err := strconv.ParseFloat(themed.Contents().Styles[0]["Fontsize"], 64)
+				require.NoError(t, err)
+				assert.InDelta(t, float64(tc.height)*0.1, fontSize, 0.001, "theme used a different canvas")
 			})
 		}
 	})
@@ -186,9 +281,10 @@ func TestPositionUsesLibassResolutionInference(t *testing.T) {
 			value string
 		}{
 			{name: "not a number", value: "bad"},
-			{name: "zero", value: "0"},
-			{name: "negative", value: "-1"},
+			{name: "empty", value: ""},
+			{name: "fractional", value: "10.5"},
 			{name: "beyond 32 bits", value: "2147483648"},
+			{name: "below 32 bits", value: "-2147483649"},
 		}
 
 		for _, tc := range testCases {

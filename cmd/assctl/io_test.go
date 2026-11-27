@@ -40,6 +40,8 @@ func TestCLIOutputFailureForEveryCommand(t *testing.T) {
 		{name: "positions JSON", args: []string{"positions", "--json"}},
 		{name: "presets", args: []string{"presets"}},
 		{name: "presets JSON", args: []string{"presets", "--json"}},
+		{name: "safe areas", args: []string{"safe-areas"}},
+		{name: "safe areas JSON", args: []string{"safe-areas", "--json"}},
 		{name: "tags", args: []string{"tags"}, input: `{"Spacing":2}`},
 		{name: "version", args: []string{"version"}},
 		{name: "help", args: []string{"--help"}},

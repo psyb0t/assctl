@@ -37,7 +37,7 @@ test-integration: dev-image
 	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -run '^TestRender' ./pkg/ass
 
 test-real: dev-image
-	$(DEV_RUN) -e ASSCTL_TEST_REAL_FONTS=1 $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -v -tags real -run '^TestReal' ./internal/pkg/fonts
+	$(DEV_RUN) -e ASSCTL_TEST_REAL_FONTS=1 $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -v -tags real -run '^TestReal' ./internal/pkg/fonts ./cmd/assctl
 
 test-fuzz: dev-image
 	$(DEV_RUN) --network none $(DEV_IMAGE) sh -ec 'for name in FuzzParsePreservesBytes FuzzGeneratedOverrideRoundTrip; do go test -mod=vendor -race -run "^$$" -fuzz "^$$name$$" -fuzztime=10s -parallel=2 -timeout=2m ./pkg/ass; done'

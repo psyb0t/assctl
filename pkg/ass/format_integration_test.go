@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,14 @@ import (
 )
 
 func renderFrame(t *testing.T, script Script, at time.Duration, width, height int) image.Image {
+	t.Helper()
+
+	return renderFrameWithEnv(t, script, at, width, height, nil)
+}
+
+// renderFrameWithEnv renders like renderFrame with extra KEY=value entries added
+// to the ffmpeg environment.
+func renderFrameWithEnv(t *testing.T, script Script, at time.Duration, width, height int, env []string) image.Image {
 	t.Helper()
 
 	file := filepath.Join(t.TempDir(), "captions.ass")
@@ -29,6 +38,9 @@ func renderFrame(t *testing.T, script Script, at time.Duration, width, height in
 		"-vf", "ass="+file, "-ss", fmt.Sprintf("%.2f", at.Seconds()),
 		"-frames:v", "1", "-threads", "1", "-f", "image2pipe", "-c:v", "png", "-",
 	)
+	if len(env) > 0 {
+		command.Env = append(os.Environ(), env...)
+	}
 	var diagnostics bytes.Buffer
 	command.Stderr = &diagnostics
 

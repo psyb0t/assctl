@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	scaleResetTag       = "\\fsc"
 	maxTransformDepth   = 16
 	defaultClipScale    = 1
 	defaultAcceleration = 1
@@ -57,6 +58,9 @@ func (o *Override) tags(depth int) (string, error) {
 	}
 
 	parts := appendValue([]string{}, "r", o.ResetStyle)
+	if o.ResetScale {
+		parts = append(parts, scaleResetTag)
+	}
 	parts = append(parts, o.positionTags(), o.fontTags(), colors, numeric)
 	parts = appendValue(parts, "fe", o.Encoding)
 	parts = appendValue(parts, "be", o.BlurEdges)
@@ -244,7 +248,8 @@ func (a Transform) tags(depth int) (string, error) {
 		o.Alignment != nil || o.ResetStyle != nil || o.FontName != nil || o.Encoding != nil ||
 		o.Bold != nil || o.BoldWeight != nil || o.Italic != nil || o.Underline != nil || o.StrikeOut != nil ||
 		o.Fade != nil || o.SimpleFade != nil || o.Karaoke != nil || o.KaraokeStart != nil ||
-		o.WrapStyle != nil || o.DrawingMode != nil || o.DrawingBaseline != nil || o.VectorClip != nil || len(o.Transform) > 0) {
+		o.WrapStyle != nil || o.DrawingMode != nil || o.DrawingBaseline != nil || o.VectorClip != nil ||
+		o.ResetScale || len(o.Transform) > 0) {
 		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "transform contains a tag ASS cannot animate")
 	}
 	payload, err := a.Override.tags(depth)
@@ -254,7 +259,8 @@ func (a Transform) tags(depth int) (string, error) {
 	if payload == "" {
 		return "", nil
 	}
-	if a.Start < 0 || a.End < a.Start || math.IsNaN(a.Accel) || math.IsInf(a.Accel, 0) || a.Accel < 0 {
+	// An End of zero runs the transform until the event ends.
+	if a.Start < 0 || (a.End != 0 && a.End < a.Start) || math.IsNaN(a.Accel) || math.IsInf(a.Accel, 0) || a.Accel < 0 {
 		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "invalid transform timing or acceleration")
 	}
 

@@ -12,9 +12,9 @@ Give your subtitles a look worth keeping. assctl creates Advanced SubStation Alp
 | --- | --- |
 | Install the CLI and preset fonts | [Installation](install.md) |
 | Create, inspect, edit, validate, and theme | [CLI guide](cli.md) |
-| Choose a look and manage its fonts | [Presets and fonts](presets.md) |
-| Place captions independently of their appearance | [Text positions](positions.md) |
-| Use tags, drawing, karaoke, and headers | [ASS features](ass-features.md) |
+| Choose a look, and install or embed its fonts | [Presets and fonts](presets.md) |
+| Place captions and check platform safe areas | [Text positions](positions.md) |
+| Use tags, drawing, karaoke, effects, embedded fonts, and headers | [ASS features](ass-features.md) |
 | Build your own subtitle tooling | [Go library](go.md) |
 | Give an agent the command | [Agent integrations](agents.md) |
 | Find a rejected input or rendering issue | [Troubleshooting](troubleshooting.md) |

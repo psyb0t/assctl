@@ -14,7 +14,7 @@ func TestPointerHelpersCopyValues(t *testing.T) {
 	assert.Equal(t, ColorWhite, *ColorWhite.Ptr())
 	assert.Equal(t, AlphaHalf, *AlphaHalf.Ptr())
 	assert.Equal(t, BorderStyleOpaqueBox, *BorderStyleOpaqueBox.Ptr())
-	assert.Equal(t, EffectBanner, *EffectBanner.Ptr())
+	assert.Equal(t, Effect("Banner;10;1"), *Effect("Banner;10;1").Ptr())
 	assert.Equal(t, AlignmentTopRight, *AlignmentTopRight.Ptr())
 	assert.Equal(t, EncodingShiftJIS, *EncodingShiftJIS.Ptr())
 	assert.Equal(t, BoldWeightBold, *BoldWeightBold.Ptr())

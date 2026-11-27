@@ -17,17 +17,19 @@ description: Commands, flags, JSON formats, file editing, and shell completion.
 | `positions --json` | List independent caption layouts and their ratios. |
 | `position INPUT --text-position NAME --output FILE` | Replace style alignment and margins. Add `--style NAME` to select one style. |
 | `tags --spec FILE` | Print a typed ASS override block from JSON. |
+| `safe-area INPUT --platform NAME` | Print a JSON list of styles and events whose margins reach under TikTok, Shorts or Reels buttons and captions, and fail when there are any. `NAME` is `all` (default), `tiktok`, `shorts` or `reels`. See [platform safe areas](positions.md#platform-safe-areas) for the fields. |
+| `safe-areas --json` | List the `tiktok`, `shorts` and `reels` safe areas and the combined `all` area. `--json` adds the edge ratios. |
 | `version` or `--version` | Print the installed version. |
 | `completion SHELL` | Generate completion for Bash, Zsh, Fish, or PowerShell. |
 | `fonts-install --preset NAME` | Install one built-in preset's required fonts. Omit the flag for all presets. |
 
-Flags can appear before or after the positional input. Run `assctl COMMAND --help` for command-specific options. `--output` defaults to stdout and accepts `-`. `create` and `captions` default to stdin for their JSON specs. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
+Flags can appear before or after the positional input. Run `assctl COMMAND --help` for command-specific options. `--output` defaults to stdout and accepts `-`. `create`, `captions` and `tags` default to stdin for their JSON specs. `captions` and `theme` use `black-gold` when neither `--preset` nor `--theme-file` is given, and the two flags cannot be combined. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
 
 The command tree and help use Cobra. Run `assctl completion SHELL --help` for installation instructions for your shell.
 
 JSON specs must contain exactly one object. Unknown fields, duplicate field names ignoring case, trailing values, and nesting beyond 64 levels are rejected. Typed strings must produce valid UTF-8 ASS output.
 
-`create`, `captions`, and `theme` accept `--text-position NAME`. See [text positions](positions.md) for geometry and override precedence, and [ASS features](ass-features.md) for typed tags, script headers, comments, and wrapping modes.
+`create`, `captions`, and `theme` accept `--text-position NAME` and a repeatable `--embed-font FILE`, which stores the font in the output file. `captions` and `theme` also accept `--embed-preset-fonts`, which installs the preset's verified fonts and embeds them. See [embedded fonts](presets.md#embed-fonts). See [text positions](positions.md) for geometry and override precedence, and [ASS features](ass-features.md) for typed tags, script headers, comments, and wrapping modes.
 
 ## Build captions from timed text
 
@@ -49,7 +51,7 @@ JSON specs must contain exactly one object. Unknown fields, duplicate field name
 
 Durations in the typed JSON files use nanoseconds. Here the line lasts 2.2 seconds. The command reads timing you supply. Each box preset produces separate background and foreground events for new captions.
 
-Lines containing ASS tags or escapes keep their original text when uppercase or word wrapping is enabled.
+Lines containing a backslash (ASS tags, `\N` or other escapes) are written as given: no uppercase, wrapping or escaping. In other lines, `captions` escapes `{` so the text after it shows, as described under [literal braces](ass-features.md#literal-braces).
 
 ```bash
 assctl captions --preset black-gold --spec timing.json --output captions.ass

@@ -94,20 +94,24 @@ func TestSocialPresetsScaleAndPreserveDialogue(t *testing.T) {
 	const (
 		lowerMargin = 0.4
 		upperMargin = 0.18
+		leftRatio   = 120.0 / 1080
+		rightRatio  = 300.0 / 1080
 	)
 
 	testCases := []struct {
 		name        string
 		alignment   Alignment
 		marginRatio float64
+		leftRatio   float64
+		rightRatio  float64
 	}{
-		{name: "tiktok-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin},
-		{name: "reels-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin},
-		{name: "shorts-impact", alignment: AlignmentBottomCenter, marginRatio: lowerMargin},
-		{name: "social-center", alignment: AlignmentMiddleCenter, marginRatio: 0},
-		{name: "social-box", alignment: AlignmentBottomCenter, marginRatio: lowerMargin},
-		{name: "social-hook", alignment: AlignmentTopCenter, marginRatio: upperMargin},
-		{name: "the-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin},
+		{name: "tiktok-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin, leftRatio: leftRatio, rightRatio: rightRatio},
+		{name: "reels-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin, leftRatio: leftRatio, rightRatio: rightRatio},
+		{name: "shorts-impact", alignment: AlignmentBottomCenter, marginRatio: lowerMargin, leftRatio: leftRatio, rightRatio: rightRatio},
+		{name: "social-center", alignment: AlignmentMiddleCenter, leftRatio: leftRatio, rightRatio: rightRatio},
+		{name: "social-box", alignment: AlignmentBottomCenter, marginRatio: lowerMargin, leftRatio: leftRatio, rightRatio: rightRatio},
+		{name: "social-hook", alignment: AlignmentTopCenter, marginRatio: upperMargin, leftRatio: upperMargin, rightRatio: upperMargin},
+		{name: "the-bold", alignment: AlignmentBottomCenter, marginRatio: lowerMargin, leftRatio: leftRatio, rightRatio: rightRatio},
 	}
 
 	for _, tc := range testCases {
@@ -129,11 +133,11 @@ func TestSocialPresetsScaleAndPreserveDialogue(t *testing.T) {
 
 					style := script.Styles[0]
 					assert.Equal(t, tc.alignment, style.Alignment)
-					assert.Equal(t, int(float64(height)*tc.marginRatio), style.MarginV)
+					assert.Equal(t, marginPixels(height, tc.marginRatio), style.MarginV)
 					assert.Equal(t, preset.Font, style.FontName)
 					assert.Equal(t, float64(height)*preset.FontRatio, style.FontSize)
-					assert.Equal(t, int(float64(width)*0.18), style.MarginL)
-					assert.Equal(t, style.MarginL, style.MarginR)
+					assert.Equal(t, marginPixels(width, tc.leftRatio), style.MarginL)
+					assert.Equal(t, marginPixels(width, tc.rightRatio), style.MarginR)
 
 					last := script.Events[len(script.Events)-1]
 					assert.Equal(t, "{\\k30}Hello, world", last.Text)
@@ -152,6 +156,30 @@ func TestSocialPresetsScaleAndPreserveDialogue(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("exact margins on a 1080 by 1920 canvas", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name     string
+			left     int
+			right    int
+			vertical int
+		}{
+			{name: "tiktok-bold", left: 120, right: 300, vertical: 768},
+			{name: "social-center", left: 120, right: 300, vertical: 0},
+			{name: "social-hook", left: 195, right: 195, vertical: 346},
+		}
+		for _, tc := range testCases {
+			preset, err := LookupPreset(tc.name)
+			require.NoError(t, err)
+
+			style := preset.Captions(CaptionSpec{Width: 1080, Height: 1920}).Styles[0]
+			assert.Equal(t, tc.left, style.MarginL, tc.name)
+			assert.Equal(t, tc.right, style.MarginR, tc.name)
+			assert.Equal(t, tc.vertical, style.MarginV, tc.name)
+		}
+	})
 }
 
 func TestSocialThemeMarginsAndExistingPositionOverrides(t *testing.T) {
@@ -166,21 +194,44 @@ func TestSocialThemeMarginsAndExistingPositionOverrides(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	rightOnly := Preset{
+		Name: "right-only", Font: FontDejaVuSans, FontRatio: 0.04, BackgroundAlpha: AlphaTransparent,
+		RightMarginRatio: 0.2, Alignment: AlignmentBottomCenter,
+	}
+	leftOnly := Preset{
+		Name: "left-only", Font: FontDejaVuSans, FontRatio: 0.04, BackgroundAlpha: AlphaTransparent,
+		SideMarginRatio: 0.1, Alignment: AlignmentBottomCenter,
+	}
+	both := leftOnly
+	both.RightMarginRatio = 0.25
+
 	testCases := []struct {
-		name  string
-		left  string
-		right string
+		name   string
+		preset *Preset
+		left   string
+		right  string
 	}{
 		{name: "clean", left: "23", right: "37"},
-		{name: "tiktok-bold", left: "194", right: "194"},
+		{name: "tiktok-bold", left: "120", right: "300"},
+		{name: "social-hook", left: "195", right: "195"},
+		{name: "social-center", left: "120", right: "300"},
+		{name: "side ratio sets both sides", preset: &leftOnly, left: "108", right: "108"},
+		{name: "right ratio alone writes both margins", preset: &rightOnly, left: "0", right: "216"},
+		{name: "right ratio replaces the side ratio on the right", preset: &both, left: "108", right: "270"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			preset, err := LookupPreset(tc.name)
-			require.NoError(t, err)
+			var preset Preset
+			if tc.preset != nil {
+				preset = *tc.preset
+			} else {
+				var err error
+				preset, err = LookupPreset(tc.name)
+				require.NoError(t, err)
+			}
 
 			updated, err := document.Theme(preset, "Default")
 			require.NoError(t, err)
@@ -190,6 +241,82 @@ func TestSocialThemeMarginsAndExistingPositionOverrides(t *testing.T) {
 			assert.Equal(t, tc.right, contents.Styles[0]["MarginR"])
 			assert.Equal(t, "{\\pos(12,34)}Hello", contents.Events[0]["Text"])
 			assert.Equal(t, "99", contents.Events[0]["MarginL"])
+		})
+	}
+}
+
+func TestCaptionsEscapeAndWrapPlainText(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		text      string
+		uppercase bool
+		words     int
+		want      string
+	}{
+		{name: "empty", text: "", uppercase: true, words: 2, want: ""},
+		{name: "plain text", text: "plain words", want: "plain words"},
+		{name: "uppercase", text: "plain words", uppercase: true, want: "PLAIN WORDS"},
+		{name: "brace is escaped", text: "a {b} c", want: `a \{{}b} c`},
+		{name: "brace text is uppercased and wrapped", text: "a {b} c", uppercase: true, words: 2, want: `A \{{}B}\NC`},
+		{name: "brace text is wrapped", text: "{one two three", words: 2, want: `\{{}one two\Nthree`},
+		{name: "wrapped plain text", text: "one two three", words: 2, want: `one two\Nthree`},
+		{name: "tags are kept", text: `{\an8}hi {there}`, uppercase: true, words: 1, want: `{\an8}hi {there}`},
+		{name: "line break is kept", text: `one\Ntwo three`, uppercase: true, words: 1, want: `one\Ntwo three`},
+		{name: "lone backslash keeps the text", text: `a\b {c}`, uppercase: true, want: `a\b {c}`},
+	}
+
+	for _, preset := range []string{PresetBlackGold, "clean"} {
+		for _, tc := range testCases {
+			t.Run(preset+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				look, err := LookupPreset(preset)
+				require.NoError(t, err)
+				script := look.Captions(CaptionSpec{
+					Width: 1080, Height: 1920, Uppercase: tc.uppercase, WordsPerLine: tc.words,
+					Dialogues: []Dialogue{{End: time.Second, Text: tc.text}},
+				})
+
+				require.NotEmpty(t, script.Events)
+				for _, event := range script.Events {
+					assert.Equal(t, tc.want, event.Text)
+				}
+				_, err = script.MarshalText()
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
+func TestCaptionsRightMarginRatio(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		side  float64
+		right float64
+		left  int
+		want  int
+	}{
+		{name: "none", left: 0, want: 0},
+		{name: "side ratio on both sides", side: 0.1, left: 108, want: 108},
+		{name: "right ratio alone", right: 0.2, left: 0, want: 216},
+		{name: "right ratio replaces the side ratio", side: 0.1, right: 0.2, left: 108, want: 216},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			preset := Preset{
+				Name: "probe", Font: FontDejaVuSans, FontRatio: 0.04, BackgroundAlpha: AlphaTransparent,
+				SideMarginRatio: tc.side, RightMarginRatio: tc.right, Alignment: AlignmentBottomCenter,
+			}
+			style := preset.Captions(CaptionSpec{Width: 1080, Height: 1920}).Styles[0]
+			assert.Equal(t, tc.left, style.MarginL)
+			assert.Equal(t, tc.want, style.MarginR)
 		})
 	}
 }

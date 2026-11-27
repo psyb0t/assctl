@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/ctxerrors/commerr"
 )
 
 // Edit contains changes to script settings, named styles, and numbered events.
@@ -38,15 +39,15 @@ func (d *Document) Apply(edit Edit) (*Document, error) {
 	styleIndices := make(map[string]record, len(d.styles))
 	changed := make(map[int]bool, len(edit.Styles)+len(edit.Events))
 	for _, style := range d.styles {
-		styleIndices[strings.TrimSpace(style.field("Name"))] = style
+		styleIndices[strings.TrimSpace(style.field(columnName))] = style
 	}
 	for _, change := range edit.Styles {
 		style, ok := styleIndices[change.Name]
 		if !ok {
-			return nil, ctxerrors.Wrapf(ErrNotFound, "style %q", change.Name)
+			return nil, ctxerrors.Wrapf(commerr.ErrNotFound, "style %q", change.Name)
 		}
 		if changed[style.line] {
-			return nil, ctxerrors.Wrapf(ErrInvalidValue, "style %q appears twice in the edit", change.Name)
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "style %q appears twice in the edit", change.Name)
 		}
 		line, err := style.replace(change.Fields, nil)
 		if err != nil {
@@ -58,11 +59,11 @@ func (d *Document) Apply(edit Edit) (*Document, error) {
 
 	for _, change := range edit.Events {
 		if change.Index < 1 || change.Index > len(d.events) {
-			return nil, ctxerrors.Wrapf(ErrNotFound, "event %d", change.Index)
+			return nil, ctxerrors.Wrapf(commerr.ErrNotFound, "event %d", change.Index)
 		}
 		event := d.events[change.Index-1]
 		if changed[event.line] {
-			return nil, ctxerrors.Wrapf(ErrInvalidValue, "event %d appears twice in the edit", change.Index)
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "event %d appears twice in the edit", change.Index)
 		}
 		line, err := event.replace(change.Fields, change.Override)
 		if err != nil {
@@ -94,16 +95,22 @@ func (d *Document) editInfo(lines []string, edits map[string]string) error {
 	}
 
 	var additions []string
+	seen := make(map[string]bool, len(edits))
 	for _, name := range slices.Sorted(maps.Keys(edits)) {
+		key := strings.ToLower(name)
+		if seen[key] {
+			return ctxerrors.Wrapf(commerr.ErrInvalidValue, "setting %q appears twice in the edit", name)
+		}
+		seen[key] = true
 		value := edits[name]
-		if strings.TrimSpace(name) != name || name == "" || strings.ContainsAny(name, "[]:;\r\n\x00") ||
-			strings.ContainsAny(value, "\r\n\x00") {
-			return ctxerrors.Wrapf(ErrInvalidValue, "invalid setting %q", name)
+		if strings.TrimSpace(name) != name || name == "" || strings.ContainsAny(name, headerKeyInvalid) ||
+			strings.ContainsAny(value, lineBreakChars) {
+			return ctxerrors.Wrapf(commerr.ErrInvalidValue, "invalid setting %q", name)
 		}
 		if item, ok := d.info[strings.ToLower(name)]; ok {
 			lines[item.line] = item.prefix + value + item.ending
 		} else {
-			additions = append(additions, name+": "+value+ending)
+			additions = append(additions, name+headerSeparator+value+ending)
 		}
 	}
 	lines[d.infoStart] = header + strings.Join(additions, "")
@@ -117,19 +124,20 @@ func (r record) replace(fields map[string]string, override *Override) (string, e
 	for name, value := range fields {
 		index := r.fieldIndex(name)
 		if index < 0 {
-			return "", ctxerrors.Wrapf(ErrNotFound, "field %q", name)
+			return "", ctxerrors.Wrapf(commerr.ErrNotFound, "field %q", name)
 		}
 		if seen[index] {
-			return "", ctxerrors.Wrapf(ErrInvalidValue, "field %q appears twice in the edit", name)
+			return "", ctxerrors.Wrapf(commerr.ErrInvalidValue, "field %q appears twice in the edit", name)
 		}
-		if strings.ContainsAny(value, "\r\n\x00") || (!strings.EqualFold(name, "Text") && strings.ContainsRune(value, ',')) {
-			return "", ctxerrors.Wrapf(ErrInvalidValue, "field %q contains a record delimiter", name)
+		if strings.ContainsAny(value, lineBreakChars) ||
+			(!strings.EqualFold(name, columnText) && strings.Contains(value, fieldSeparator)) {
+			return "", ctxerrors.Wrapf(commerr.ErrInvalidValue, "field %q contains a record delimiter", name)
 		}
 		values[index] = value
 		seen[index] = true
 	}
 	if override != nil {
-		index := r.fieldIndex("Text")
+		index := r.fieldIndex(columnText)
 		if index < 0 {
 			return "", ctxerrors.Wrap(ErrInvalidDocument, "event is missing its Text field")
 		}
@@ -140,5 +148,5 @@ func (r record) replace(fields map[string]string, override *Override) (string, e
 		values[index] = tags + values[index]
 	}
 
-	return r.prefix + strings.Join(values, ",") + r.ending, nil
+	return r.prefix + strings.Join(values, fieldSeparator) + r.ending, nil
 }

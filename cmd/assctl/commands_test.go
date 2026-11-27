@@ -13,6 +13,10 @@ import (
 	"testing"
 	"testing/iotest"
 
+	"github.com/psyb0t/ctxerrors/commerr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/psyb0t/assctl/pkg/ass"
 )
 
@@ -21,14 +25,29 @@ const scriptJSON = "{" +
 	"\"Styles\":[{\"Name\":\"Default\",\"FontName\":\"DejaVu Sans\"}]," +
 	"\"Events\":[{\"Style\":\"Default\",\"End\":1000000000,\"Text\":\"Café, world\"}]}"
 
+type brokenOutput struct{ err error }
+
+func (w brokenOutput) Write([]byte) (int, error) { return 0, w.err }
+
 func runCLI(t *testing.T, input string, args ...string) string {
 	t.Helper()
 
 	var output, diagnostics bytes.Buffer
-	if err := run(args, strings.NewReader(input), &output, &diagnostics); err != nil {
-		t.Fatalf("%v returned %v, stderr: %s", args, err, diagnostics.String())
-	}
+	err := run(args, strings.NewReader(input), &output, &diagnostics)
+	require.NoError(t, err, "%v stderr: %s", args, diagnostics.String())
+
 	return output.String()
+}
+
+func runCLIFailure(t *testing.T, input string, args ...string) error {
+	t.Helper()
+
+	var output bytes.Buffer
+	err := run(args, strings.NewReader(input), &output, io.Discard)
+	require.Error(t, err, "%v", args)
+	require.Empty(t, output.String(), "%v wrote output before failing", args)
+
+	return err
 }
 
 func TestCLICreateEditAndInspect(t *testing.T) {
@@ -38,76 +57,124 @@ func TestCLICreateEditAndInspect(t *testing.T) {
 	path := filepath.Join(directory, "source.ass")
 	runCLI(t, scriptJSON, "create", "--output", path)
 	original, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := runCLI(t, string(original), "validate", "-"); got != "valid ASS\n" {
-		t.Fatalf("validate returned %q", got)
-	}
+	require.NoError(t, err)
+
+	assert.Equal(t, "valid ASS\n", runCLI(t, string(original), "validate", "-"))
+
 	edits := "{\"Info\":{\"Title\":\"Edited\"}," +
 		"\"Events\":[{\"Index\":1,\"Override\":{\"Position\":{\"X\":270,\"Y\":800}}}]}"
 	updated := runCLI(t, edits, "edit", "--spec", "-", path)
 	infoJSON := runCLI(t, updated, "inspect", "-")
 	var contents ass.Contents
-	if err := json.Unmarshal([]byte(infoJSON), &contents); err != nil {
-		t.Fatal(err)
-	}
-	if contents.Info["Title"] != "Edited" || len(contents.Events) != 1 ||
-		contents.Events[0]["Text"] != "{\\pos(270,800)}Café, world" {
-		t.Fatalf("unexpected edited contents: %+v", contents)
-	}
+	require.NoError(t, json.Unmarshal([]byte(infoJSON), &contents))
+	assert.Equal(t, "Edited", contents.Info["Title"])
+	require.Len(t, contents.Events, 1)
+	assert.Equal(t, "{\\pos(270,800)}Café, world", contents.Events[0]["Text"])
+
 	saved, err := os.ReadFile(path)
-	if err != nil || !bytes.Equal(saved, original) {
-		t.Fatalf("edit changed the input file, read error: %v", err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, original, saved, "edit changed the input file")
 }
 
 func TestCLIHelpPresetsAndVersion(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{nil, {"help"}, {"-h"}, {"--help"}} {
-		if got := runCLI(t, "", args...); !strings.Contains(got, "Usage:") || !strings.Contains(got, "Available Commands:") {
-			t.Fatalf("%v returned %q", args, got)
+	t.Run("help forms", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name string
+			args []string
+		}{
+			{name: "no arguments"},
+			{name: "help command", args: []string{"help"}},
+			{name: "short flag", args: []string{"-h"}},
+			{name: "long flag", args: []string{"--help"}},
 		}
-	}
-	presets := strings.Fields(runCLI(t, "", "presets"))
-	if want := []string{"black-gold", "ivory-navy", "mint-plum", "clean"}; !slices.Equal(presets, want) {
-		t.Fatalf("presets returned %v, want %v", presets, want)
-	}
-	for _, args := range [][]string{{"version"}, {"--version"}} {
-		if got := runCLI(t, "", args...); got != "dev\n" {
-			t.Fatalf("version returned %q for local build", got)
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				got := runCLI(t, "", tc.args...)
+				assert.Contains(t, got, "Usage:")
+				assert.Contains(t, got, "Available Commands:")
+			})
 		}
-	}
-	var output, diagnostics bytes.Buffer
-	if err := run([]string{"captions", "--help"}, strings.NewReader(""), &output, &diagnostics); err != nil ||
-		diagnostics.Len() != 0 || !strings.Contains(output.String(), "--theme-file") {
-		t.Fatalf("command help returned %v, stdout %q, stderr %q", err, output.String(), diagnostics.String())
-	}
+	})
+
+	t.Run("preset list", func(t *testing.T) {
+		t.Parallel()
+
+		want := []string{
+			"black-gold", "ivory-navy", "mint-plum", "clean", "tiktok-bold", "reels-bold",
+			"shorts-impact", "social-center", "social-box", "social-hook", "the-bold",
+		}
+		presets := strings.Fields(runCLI(t, "", "presets"))
+		assert.True(t, slices.Equal(presets, want), "presets returned %v, want %v", presets, want)
+	})
+
+	t.Run("version forms", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name string
+			args []string
+		}{
+			{name: "command", args: []string{"version"}},
+			{name: "flag", args: []string{"--version"}},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				assert.Equal(t, "dev\n", runCLI(t, "", tc.args...))
+			})
+		}
+	})
+
+	t.Run("command help", func(t *testing.T) {
+		t.Parallel()
+
+		var output, diagnostics bytes.Buffer
+		err := run([]string{"captions", "--help"}, strings.NewReader(""), &output, &diagnostics)
+		require.NoError(t, err)
+		assert.Empty(t, diagnostics.String())
+		assert.Contains(t, output.String(), "--theme-file")
+	})
 }
 
 func TestCLIFlagsAfterInputAndCompletion(t *testing.T) {
 	t.Parallel()
 
-	source := filepath.Join(t.TempDir(), "source.ass")
-	runCLI(t, scriptJSON, "create", "--output", source)
-	themed := runCLI(t, "", "theme", source, "--preset", "mint-plum", "--style", "Default")
-	document, err := ass.Parse(strings.NewReader(themed))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := document.Contents().Styles[0]["Fontname"]; got != "DejaVu Sans Mono" {
-		t.Fatalf("theme flag after input selected font %q", got)
-	}
-	completion := runCLI(t, "", "completion", "bash")
-	if !strings.Contains(completion, "__start_assctl") {
-		t.Fatal("bash completion lacks the assctl entry point")
-	}
-	var output bytes.Buffer
-	err = run([]string{"completion", "unknown-shell"}, strings.NewReader(""), &output, io.Discard)
-	if err == nil || output.Len() != 0 {
-		t.Fatalf("invalid completion shell returned %v, output %q", err, output.String())
-	}
+	t.Run("theme flags after input", func(t *testing.T) {
+		t.Parallel()
+
+		source := filepath.Join(t.TempDir(), "source.ass")
+		runCLI(t, scriptJSON, "create", "--output", source)
+		themed := runCLI(t, "", "theme", source, "--preset", "mint-plum", "--style", "Default")
+		document, err := ass.Parse(strings.NewReader(themed))
+		require.NoError(t, err)
+		styles := document.Contents().Styles
+		require.NotEmpty(t, styles)
+		assert.Equal(t, "DejaVu Sans Mono", styles[0]["Fontname"])
+	})
+
+	t.Run("bash completion", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Contains(t, runCLI(t, "", "completion", "bash"), "__start_assctl")
+	})
+
+	t.Run("unknown completion shell", func(t *testing.T) {
+		t.Parallel()
+
+		var output bytes.Buffer
+		err := run([]string{"completion", "unknown-shell"}, strings.NewReader(""), &output, io.Discard)
+		require.Error(t, err)
+		assert.Empty(t, output.String())
+	})
 }
 
 func TestCLIRejectsInvalidArgumentsAndFiles(t *testing.T) {
@@ -121,59 +188,110 @@ func TestCLIRejectsInvalidArgumentsAndFiles(t *testing.T) {
 		want  error
 	}{
 		{name: "unknown command", args: []string{"unknown"}},
-		{name: "unknown font preset", args: []string{"fonts-install", "--preset", "missing"}, want: ass.ErrNotFound},
-		{name: "extra font argument", args: []string{"fonts-install", "extra"}, want: errUsage},
-		{name: "extra version argument", args: []string{"version", "extra"}, want: errUsage},
+		{
+			name: "unknown font preset", args: []string{"fonts-install", "--preset", "missing"},
+			want: commerr.ErrNotFound,
+		},
+		{
+			name: "extra font argument", args: []string{"fonts-install", "extra"},
+			want: commerr.ErrInvalidArgument,
+		},
+		{
+			name: "extra version argument", args: []string{"version", "extra"},
+			want: commerr.ErrInvalidArgument,
+		},
 		{name: "unrecognized flag", args: []string{"presets", "--bad"}},
-		{name: "two JSON values", args: []string{"create"}, input: scriptJSON + " {}", want: errUsage},
+		{
+			name: "two JSON values", args: []string{"create"}, input: scriptJSON + " {}",
+			want: commerr.ErrInvalidArgument,
+		},
 		{name: "unknown JSON field", args: []string{"create"}, input: "{\"Unexpected\":true}"},
 		{name: "malformed JSON", args: []string{"create"}, input: "{"},
-		{name: "invalid script JSON", args: []string{"create"}, input: "{}", want: ass.ErrInvalidValue},
+		{
+			name: "invalid script JSON", args: []string{"create"}, input: "{}",
+			want: commerr.ErrInvalidValue,
+		},
 		{name: "missing ASS file", args: []string{"inspect", missing}, want: fs.ErrNotExist},
 		{name: "missing JSON file", args: []string{"create", "--spec", missing}, want: fs.ErrNotExist},
 		{name: "missing edits file", args: []string{"edit", "--spec", missing, "-"}, want: fs.ErrNotExist},
-		{name: "invalid edit source", args: []string{"edit", "--spec", "-", missing}, input: "{}", want: fs.ErrNotExist},
-		{name: "missing theme file", args: []string{"theme", "--theme-file", missing, "-"}, want: fs.ErrNotExist},
-		{name: "invalid theme source", args: []string{"theme", "-"}, input: "bad source", want: ass.ErrInvalidDocument},
+		{
+			name: "invalid edit source", args: []string{"edit", "--spec", "-", missing}, input: "{}",
+			want: fs.ErrNotExist,
+		},
+		{
+			name: "missing theme file", args: []string{"theme", "--theme-file", missing, "-"},
+			want: fs.ErrNotExist,
+		},
+		{
+			name: "invalid theme source", args: []string{"theme", "-"}, input: "bad source",
+			want: ass.ErrInvalidDocument,
+		},
 		{
 			name: "invalid validation source", args: []string{"validate", "-"},
 			input: "[Script Info]\n[Events]\nFormat: Style, Start, End, Text\nDialogue: Missing,0:00:00.00,0:00:01.00,Hello\n",
 			want:  ass.ErrInvalidDocument,
 		},
 	}
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			var output bytes.Buffer
-			err := run(tc.args, strings.NewReader(tc.input), &output, io.Discard)
-			if err == nil || (tc.want != nil && !errors.Is(err, tc.want)) || output.Len() != 0 {
-				t.Fatalf("%v returned %v, want %v, output %q", tc.args, err, tc.want, output.String())
+			err := runCLIFailure(t, tc.input, tc.args...)
+			if tc.want != nil {
+				require.ErrorIs(t, err, tc.want)
 			}
 		})
 	}
 }
 
-type brokenOutput struct{ err error }
-
-func (w brokenOutput) Write([]byte) (int, error) { return 0, w.err }
-
 func TestCLIPropagatesStreamFailure(t *testing.T) {
 	t.Parallel()
 
 	failure := errors.New("stream disconnected")
-	for _, args := range [][]string{{"create"}, {"inspect", "-"}} {
-		err := run(args, iotest.ErrReader(failure), io.Discard, io.Discard)
-		if !errors.Is(err, failure) {
-			t.Fatalf("%v returned %v", args, err)
+
+	t.Run("input", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name string
+			args []string
+		}{
+			{name: "create", args: []string{"create"}},
+			{name: "inspect", args: []string{"inspect", "-"}},
 		}
-	}
-	for _, args := range [][]string{{"presets"}, {"presets", "--json"}, {"create"}} {
-		err := run(args, strings.NewReader(scriptJSON), brokenOutput{failure}, io.Discard)
-		if !errors.Is(err, failure) {
-			t.Fatalf("%v returned %v", args, err)
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				err := run(tc.args, iotest.ErrReader(failure), io.Discard, io.Discard)
+				require.ErrorIs(t, err, failure)
+			})
 		}
-	}
+	})
+
+	t.Run("output", func(t *testing.T) {
+		t.Parallel()
+
+		testCases := []struct {
+			name string
+			args []string
+		}{
+			{name: "presets", args: []string{"presets"}},
+			{name: "presets JSON", args: []string{"presets", "--json"}},
+			{name: "create", args: []string{"create"}},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				err := run(tc.args, strings.NewReader(scriptJSON), brokenOutput{failure}, io.Discard)
+				require.ErrorIs(t, err, failure)
+			})
+		}
+	})
 }
 
 func TestCLIFailedEditPreservesExistingOutput(t *testing.T) {
@@ -183,19 +301,16 @@ func TestCLIFailedEditPreservesExistingOutput(t *testing.T) {
 	path := filepath.Join(directory, "source.ass")
 	runCLI(t, scriptJSON, "create", "--output", path)
 	original, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	const spec = "{\"Info\":{\"Title\":\"Edited\"},\"Events\":[{\"Index\":2}]}"
 	args := []string{"edit", "--spec", "-", "--output", path, path}
 	err = run(args, strings.NewReader(spec), io.Discard, io.Discard)
-	if !errors.Is(err, ass.ErrNotFound) {
-		t.Fatalf("edit returned %v", err)
-	}
+	require.ErrorIs(t, err, commerr.ErrNotFound)
+
 	saved, err := os.ReadFile(path)
-	if err != nil || !bytes.Equal(saved, original) {
-		t.Fatalf("failed edit changed output, read error: %v", err)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, original, saved, "failed edit changed output")
 }
 
 func TestCLICleansTemporaryFilesAfterFailedOutput(t *testing.T) {
@@ -203,21 +318,76 @@ func TestCLICleansTemporaryFilesAfterFailedOutput(t *testing.T) {
 
 	directory := t.TempDir()
 	targetDirectory := filepath.Join(directory, "target")
-	if err := os.Mkdir(targetDirectory, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(targetDirectory, 0o700))
 	missingParent := filepath.Join(directory, "missing", "file.ass")
+
 	for _, path := range []string{targetDirectory, missingParent} {
 		err := run([]string{"create", "--output", path}, strings.NewReader(scriptJSON), io.Discard, io.Discard)
-		if err == nil {
-			t.Fatalf("output to %q unexpectedly succeeded", path)
-		}
+		require.Error(t, err, "output to %q unexpectedly succeeded", path)
 	}
+
 	entries, err := os.ReadDir(directory)
-	if err != nil {
-		t.Fatal(err)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "target", entries[0].Name())
+	assert.True(t, entries[0].IsDir())
+}
+
+func TestCLIPositionAndTagFailures(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	file := filepath.Join(directory, "source.ass")
+	runCLI(t, scriptJSON, "create", "--output", file)
+
+	testCases := []struct {
+		name  string
+		args  []string
+		input string
+	}{
+		{name: "missing position source", args: []string{"position", "--text-position", "portrait-upper", filepath.Join(directory, "absent.ass")}},
+		{name: "missing position style", args: []string{"position", "--text-position", "portrait-upper", "--style", "absent", file}},
+		{name: "missing position option", args: []string{"position", file}},
+		{name: "unknown theme position", args: []string{"theme", "--text-position", "absent", file}},
+		{name: "unknown theme", args: []string{"theme", "--preset", "absent", file}},
+		{name: "invalid canvas", args: []string{"create", "--text-position", "portrait-upper"}, input: strings.ReplaceAll(scriptJSON, `"Width":540`, `"Width":0`)},
+		{name: "malformed tags", args: []string{"tags"}, input: `{`},
+		{name: "unknown tag field", args: []string{"tags"}, input: `{"Spacingg":2}`},
+		{name: "negative border", args: []string{"tags"}, input: `{"Border":-1}`},
+		{name: "multiple JSON roots", args: []string{"tags"}, input: `{} {}`},
+		{name: "trailing garbage", args: []string{"tags"}, input: `{} broken`},
+		{name: "empty tag spec", args: []string{"tags"}},
+		{name: "extra positional argument", args: []string{"positions", "extra"}},
+		{name: "unknown font preset", args: []string{"fonts-install", "--preset", "absent"}},
 	}
-	if len(entries) != 1 || entries[0].Name() != "target" || !entries[0].IsDir() {
-		t.Fatalf("unexpected directory entries after failed output: %v", entries)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_ = runCLIFailure(t, tc.input, tc.args...)
+		})
+	}
+}
+
+func TestCLIJSONRejectsAmbiguousObjects(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		input string
+	}{
+		{name: "null", input: `null`},
+		{name: "duplicate field", input: `{"Spacing":1,"Spacing":2}`},
+		{name: "duplicate field differing in case", input: `{"Spacing":1,"spacing":2}`},
+		{name: "duplicate nested field differing in case", input: `{"SimpleFade":{"In":0,"in":1000000}}`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_ = runCLIFailure(t, tc.input, "tags")
+		})
 	}
 }

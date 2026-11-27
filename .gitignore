@@ -6,6 +6,7 @@ CODEX.local.md
 .agent_knowledge/
 .testing/
 .plan/
+.discuss/
 .logs/
 PLAN.md
 implplan.md
@@ -37,3 +38,4 @@ sec.sarif
 /website/node_modules/
 /website/.docusaurus/
 /website/build/
+.telemetry/

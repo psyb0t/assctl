@@ -6,7 +6,7 @@ import "time"
 // Alpha holds an ASS transparency value from 00 for opaque to FF for transparent.
 type Alpha string
 
-// Common alpha values
+// Alpha values for opaque, fully transparent and half transparent.
 const (
 	AlphaOpaque      Alpha = "&H00&"
 	AlphaTransparent Alpha = "&HFF&"
@@ -17,7 +17,6 @@ const (
 type Color string
 
 const (
-	// Basic Colors
 	ColorWhite   Color = "&H00FFFFFF"
 	ColorBlack   Color = "&H00000000"
 	ColorRed     Color = "&H000000FF"
@@ -27,12 +26,10 @@ const (
 	ColorMagenta Color = "&H00FF00FF"
 	ColorCyan    Color = "&H00FFFF00"
 
-	// Gray Shades
 	ColorGray      Color = "&H00808080"
 	ColorDarkGray  Color = "&H00404040"
 	ColorLightGray Color = "&H00C0C0C0"
 
-	// Common Colors
 	ColorPurple Color = "&H00800080"
 	ColorViolet Color = "&H00EE82EE"
 	ColorIndigo Color = "&H004B0082"
@@ -44,7 +41,6 @@ const (
 	ColorOlive  Color = "&H00008080"
 	ColorTeal   Color = "&H00808000"
 
-	// Web Colors
 	ColorDeepPink       Color = "&H009314FF"
 	ColorSkyBlue        Color = "&H00EBCE87"
 	ColorLimeGreen      Color = "&H0032CD32"
@@ -57,10 +53,14 @@ const (
 	ColorDodgerBlue     Color = "&H00FF901E"
 )
 
-func (c Color) Ptr() *string {
-	s := string(c)
+// Ptr returns a pointer to a copy of c, for optional Override fields.
+func (c Color) Ptr() *Color {
+	return &c
+}
 
-	return &s
+// Ptr returns a pointer to a copy of a, for optional Override fields.
+func (a Alpha) Ptr() *Alpha {
+	return &a
 }
 
 // Alignment represents text positioning using numpad-style layout
@@ -78,6 +78,7 @@ const (
 	AlignmentTopRight     Alignment = 9
 )
 
+// Ptr returns a pointer to a copy of a, for optional fields.
 func (a Alignment) Ptr() *Alignment {
 	return &a
 }
@@ -90,6 +91,7 @@ const (
 	BorderStyleOpaqueBox         BorderStyle = 3
 )
 
+// Ptr returns a pointer to a copy of b, for optional fields.
 func (b BorderStyle) Ptr() *BorderStyle {
 	return &b
 }
@@ -111,6 +113,7 @@ const (
 	EncodingOEM        Encoding = 255
 )
 
+// Ptr returns a pointer to a copy of e, for optional fields.
 func (e Encoding) Ptr() *Encoding {
 	return &e
 }
@@ -125,6 +128,7 @@ const (
 	BoldWeightBolder BoldWeight = 900
 )
 
+// Ptr returns a pointer to a copy of b, for optional fields.
 func (b BoldWeight) Ptr() *BoldWeight {
 	return &b
 }
@@ -142,6 +146,7 @@ const (
 	EffectScrollRight Effect = "Scroll right"
 )
 
+// Ptr returns a pointer to a copy of e, for optional fields.
 func (e Effect) Ptr() *Effect {
 	return &e
 }
@@ -154,12 +159,14 @@ const (
 	WrapStyleSmartTop WrapStyle = 0
 	// End-of-line wrapping, right margin is strictly enforced
 	WrapStyleEndOfLine WrapStyle = 1
-	// Smart wrapping, bottom line is wider (usually best looking)
-	WrapStyleSmartBottom WrapStyle = 2
+	// Smart wrapping with a wider bottom line.
+	WrapStyleSmartBottom WrapStyle = 3
 	// Forced wrapping, only wrap at \n or \N
-	WrapStyleForced WrapStyle = 3
+	WrapStyleForced WrapStyle = 2
+	WrapStyleNoWrap WrapStyle = WrapStyleForced
 )
 
+// Ptr returns a pointer to a copy of w, for optional fields.
 func (w WrapStyle) Ptr() *WrapStyle {
 	return &w
 }
@@ -168,7 +175,7 @@ func (w WrapStyle) Ptr() *WrapStyle {
 type Style struct {
 	Name         string      // Unique identifier for the style
 	FontName     string      // Name of the font to use
-	FontSize     float64     // Size of the font in points
+	FontSize     float64     // Font size in ASS script coordinates.
 	PrimaryColor Color       // Primary color in ASS format: &HBBGGRR&
 	SecondColor  Color       // Secondary color (for karaoke) in ASS format: &HBBGGRR&
 	OutlineColor Color       // Outline color in ASS format: &HBBGGRR&
@@ -206,6 +213,7 @@ type Dialogue struct {
 
 // Event represents a single subtitle event (dialogue line) in the ASS file.
 type Event struct {
+	Comment  bool          // Emit a Comment event instead of Dialogue.
 	Layer    int           // Layer number (higher layers are drawn on top)
 	Start    time.Duration // Start time of the subtitle
 	End      time.Duration // End time of the subtitle
@@ -221,47 +229,63 @@ type Event struct {
 
 // Override represents text override tags that can be applied to a subtitle event.
 type Override struct {
-	Position     *Position   // Absolute positioning
-	Movement     *Movement   // Movement animation
-	Origin       *Position   // Origin point for rotations
-	Alignment    *Alignment  // Text alignment override
-	Bold         *bool       // Bold override
-	BoldWeight   *BoldWeight // Custom bold weight
-	Italic       *bool       // Italic override
-	Underline    *bool       // Underline override
-	StrikeOut    *bool       // Strikeout override
-	FontSize     *float64    // Font size override
-	FontName     *string     // Font name override
-	PrimaryColor *Color      // Primary color override
-	SecondColor  *Color      // Secondary color override
-	OutlineColor *Color      // Outline color override
-	ShadowColor  *Color      // Shadow color override
-	GlobalAlpha  *Alpha      // Global alpha override
-	PrimaryAlpha *Alpha      // Primary color alpha
-	SecondAlpha  *Alpha      // Secondary color alpha
-	OutlineAlpha *Alpha      // Outline alpha
-	ShadowAlpha  *Alpha      // Shadow alpha
-	Border       *float64    // Border width override
-	Shadow       *float64    // Shadow depth override
-	Blur         *float64    // Blur effect
-	ScaleX       *float64    // Horizontal scaling override
-	ScaleY       *float64    // Vertical scaling override
-	RotationZ    *float64    // Z-axis rotation
-	RotationX    *float64    // X-axis rotation
-	RotationY    *float64    // Y-axis rotation
-	ShearX       *float64    // X-axis shearing
-	ShearY       *float64    // Y-axis shearing
-	Fade         *Fade       // Fade effect
-	Transform    []Transform // Transform animations
-	Clip         *Clip       // Clipping rectangle
-	WrapStyle    *WrapStyle  // Wrap style override
+	ResetStyle      *string // Reset overrides, optionally to another named style.
+	Spacing         *float64
+	Encoding        *Encoding
+	BorderX         *float64
+	BorderY         *float64
+	ShadowX         *float64
+	ShadowY         *float64
+	BlurEdges       *int
+	DrawingMode     *int
+	DrawingBaseline *float64
+	Karaoke         *Karaoke
+	KaraokeStart    *time.Duration
+	SimpleFade      *SimpleFade
+	VectorClip      *VectorClip
+	Position        *Position   // Absolute positioning
+	Movement        *Movement   // Movement animation
+	Origin          *Position   // Origin point for rotations
+	Alignment       *Alignment  // Text alignment override
+	Bold            *bool       // Bold override
+	BoldWeight      *BoldWeight // Custom bold weight
+	Italic          *bool       // Italic override
+	Underline       *bool       // Underline override
+	StrikeOut       *bool       // Strikeout override
+	FontSize        *float64    // Font size override
+	FontName        *string     // Font name override
+	PrimaryColor    *Color      // Primary color override
+	SecondColor     *Color      // Secondary color override
+	OutlineColor    *Color      // Outline color override
+	ShadowColor     *Color      // Shadow color override
+	GlobalAlpha     *Alpha      // Global alpha override
+	PrimaryAlpha    *Alpha      // Primary color alpha
+	SecondAlpha     *Alpha      // Secondary color alpha
+	OutlineAlpha    *Alpha      // Outline alpha
+	ShadowAlpha     *Alpha      // Shadow alpha
+	Border          *float64    // Border width override
+	Shadow          *float64    // Shadow depth override
+	Blur            *float64    // Blur effect
+	ScaleX          *float64    // Horizontal scaling override
+	ScaleY          *float64    // Vertical scaling override
+	RotationZ       *float64    // Z-axis rotation
+	RotationX       *float64    // X-axis rotation
+	RotationY       *float64    // Y-axis rotation
+	ShearX          *float64    // X-axis shearing
+	ShearY          *float64    // Y-axis shearing
+	Fade            *Fade       // Fade effect
+	Transform       []Transform // Transform animations
+	Clip            *Clip       // Clipping rectangle
+	WrapStyle       *WrapStyle  // Wrap style override
 }
 
+// Position is a point in script coordinates.
 type Position struct {
 	X float64
 	Y float64
 }
 
+// Movement moves text from (X1, Y1) to (X2, Y2). T1 and T2 bound the movement in event time and must be set together.
 type Movement struct {
 	X1 float64
 	Y1 float64
@@ -271,6 +295,7 @@ type Movement struct {
 	T2 *time.Duration
 }
 
+// Fade is the complex \fade tag: alphas A1, A2 and A3 from 0 to 255 change at times T1 to T4.
 type Fade struct {
 	A1 int
 	A2 int
@@ -281,6 +306,7 @@ type Fade struct {
 	T4 time.Duration
 }
 
+// Transform animates Override from Start to End. Accel zero selects linear timing.
 type Transform struct {
 	Start    time.Duration
 	End      time.Duration
@@ -288,6 +314,7 @@ type Transform struct {
 	Override *Override
 }
 
+// Clip limits drawing to a rectangle, or to everything outside it when Inverse is set.
 type Clip struct {
 	X1      float64
 	Y1      float64
@@ -299,10 +326,39 @@ type Clip struct {
 // Script represents a complete ASS subtitle script including styles and events.
 type Script struct {
 	Title      string
+	Info       map[string]string // Additional script headers; title, type and resolution use their typed fields.
 	Resolution struct {
 		Width  int
 		Height int
 	}
 	Styles []Style
 	Events []Event
+}
+
+// KaraokeMode selects the karaoke highlight effect.
+type KaraokeMode string
+
+const (
+	KaraokeInstant KaraokeMode = "k"
+	KaraokeSweep   KaraokeMode = "kf"
+	KaraokeOutline KaraokeMode = "ko"
+)
+
+// Karaoke highlights the following syllable for Duration. An empty Mode selects KaraokeInstant.
+type Karaoke struct {
+	Mode     KaraokeMode
+	Duration time.Duration
+}
+
+// SimpleFade fades in over In and out over Out.
+type SimpleFade struct {
+	In  time.Duration
+	Out time.Duration
+}
+
+// VectorClip uses ASS drawing commands. Scale zero selects the default scale of one.
+type VectorClip struct {
+	Scale   int
+	Drawing string
+	Inverse bool
 }

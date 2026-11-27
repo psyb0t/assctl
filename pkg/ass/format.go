@@ -3,21 +3,51 @@ package ass
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/ctxerrors/commerr"
 )
 
 const (
-	styleFormat   = "Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding"
-	eventFormat   = "Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
-	standardScale = 100
-	outputMode    = 0o600
+	standardScale    = 100
+	outputMode       = 0o600
+	shortHexRGBLen   = 3
+	longHexRGBLen    = 6
+	bgrHexLen        = 6
+	abgrHexLen       = 8
+	alphaHexLen      = 2
+	fieldSeparator   = ","
+	formatSeparator  = ", "
+	headerSeparator  = ": "
+	lineBreakTag     = "\\N"
+	fieldDelimiters  = fieldSeparator + lineBreakChars
+	headerKeyInvalid = "[]:;" + lineBreakChars
 )
+
+var (
+	styleColumns = []string{
+		columnName, columnFontname, columnFontsize, columnPrimaryColour, columnSecondaryColour,
+		columnOutlineColour, columnBackColour, columnBold, columnItalic, columnUnderline, columnStrikeOut,
+		columnScaleX, columnScaleY, columnSpacing, columnAngle, columnBorderStyle, columnOutline,
+		columnShadow, columnAlignment, columnMarginL, columnMarginR, columnMarginV, columnEncoding,
+	}
+	eventColumns = []string{
+		columnLayer, columnStart, columnEnd, columnStyle, columnName,
+		columnMarginL, columnMarginR, columnMarginV, columnEffect, columnText,
+	}
+	// Script Info keys set through typed Script fields, which custom headers may not repeat.
+	typedHeaders = []string{infoTitle, infoScriptType, infoPlayResX, infoPlayResY}
+)
+
+type scriptHeader struct{ name, value string }
 
 var hexDigits = regexp.MustCompile("^[[:xdigit:]]+$")
 
@@ -44,40 +74,44 @@ func (s *Script) AddEvent(event Event) {
 func ParseRGB(value string) (Color, error) {
 	raw := strings.TrimPrefix(value, "#")
 	if !hexDigits.MatchString(raw) {
-		return "", ctxerrors.Wrap(ErrInvalidValue, "parse RGB color")
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "parse RGB color")
 	}
 	switch len(raw) {
-	case 3:
+	case shortHexRGBLen:
 		raw = strings.Repeat(raw[0:1], 2) + strings.Repeat(raw[1:2], 2) + strings.Repeat(raw[2:3], 2)
-	case 6:
+	case longHexRGBLen:
 	default:
-		return "", ctxerrors.Wrap(ErrInvalidValue, "RGB color needs three or six digits")
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "RGB color needs three or six digits")
 	}
 
-	return Color("&H00" + strings.ToUpper(raw[4:6]+raw[2:4]+raw[0:2])), nil
+	return Color(hexPrefix + opaqueAlphaHex + strings.ToUpper(raw[4:6]+raw[2:4]+raw[0:2])), nil
 }
 
 func colorValue(color Color, alpha Alpha, fallback Color) (string, error) {
 	if color == "" {
 		color = fallback
 	}
-	value := strings.TrimSuffix(strings.TrimPrefix(strings.ToUpper(string(color)), "&H"), "&")
-	if !hexDigits.MatchString(value) || (len(value) != 6 && len(value) != 8) {
-		return "", ctxerrors.Wrap(ErrInvalidValue, "ASS color needs BGR or ABGR hexadecimal digits")
+	value := hexValue(string(color))
+	if !hexDigits.MatchString(value) || (len(value) != bgrHexLen && len(value) != abgrHexLen) {
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "ASS color needs BGR or ABGR hexadecimal digits")
 	}
 
-	opacity := "00"
-	if len(value) == 8 {
-		opacity, value = value[:2], value[2:]
+	opacity := opaqueAlphaHex
+	if len(value) == abgrHexLen {
+		opacity, value = value[:alphaHexLen], value[alphaHexLen:]
 	}
 	if alpha != "" {
-		opacity = strings.TrimSuffix(strings.TrimPrefix(strings.ToUpper(string(alpha)), "&H"), "&")
-		if len(opacity) != 2 || !hexDigits.MatchString(opacity) {
-			return "", ctxerrors.Wrap(ErrInvalidValue, "ASS alpha needs two hexadecimal digits")
+		opacity = hexValue(string(alpha))
+		if len(opacity) != alphaHexLen || !hexDigits.MatchString(opacity) {
+			return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "ASS alpha needs two hexadecimal digits")
 		}
 	}
 
-	return "&H" + opacity + value, nil
+	return hexPrefix + opacity + value, nil
+}
+
+func hexValue(value string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(strings.ToUpper(value), hexPrefix), hexSuffix)
 }
 
 func integer(value int) string { return strconv.Itoa(value) }
@@ -86,15 +120,25 @@ func number(value float64) string { return strconv.FormatFloat(value, 'f', -1, 6
 
 func styleBoolean(value bool) string {
 	if value {
-		return "-1"
+		return styleTrue
 	}
-	return "0"
+
+	return styleFalse
 }
 
 func styleFields(style Style) ([]string, error) {
+	if !finite(style.FontSize, style.ScaleX, style.ScaleY, style.Spacing, style.Angle, style.Outline, style.Shadow) {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "non-finite style value")
+	}
+	if style.FontSize < 0 || style.ScaleX < 0 || style.ScaleY < 0 || style.Outline < 0 || style.Shadow < 0 {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "negative style size, scale, border, or shadow")
+	}
+	if style.MarginL < 0 || style.MarginR < 0 || style.MarginV < 0 || style.WrapStyle < WrapStyleSmartTop || style.WrapStyle > WrapStyleSmartBottom {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "invalid style margins or wrapping")
+	}
 	if strings.TrimSpace(style.Name) == "" || strings.TrimSpace(style.FontName) == "" ||
-		strings.ContainsAny(style.Name+style.FontName, ",\r\n\x00") {
-		return nil, ctxerrors.Wrap(ErrInvalidValue, "style names and font names must be single fields")
+		strings.ContainsAny(style.Name+style.FontName, fieldDelimiters) {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "style names and font names must be single fields")
 	}
 	colors := make([]string, 0, 4)
 	for _, item := range []struct {
@@ -129,12 +173,13 @@ func styleFields(style Style) ([]string, error) {
 
 func eventFields(event Event, wrap WrapStyle) ([]string, error) {
 	if event.Start < 0 || event.End <= event.Start ||
-		event.End/(10*time.Millisecond) <= event.Start/(10*time.Millisecond) {
-		return nil, ctxerrors.Wrap(ErrInvalidValue, "event needs a positive interval at centisecond precision")
+		event.End/centisecond <= event.Start/centisecond {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "event needs a positive interval at centisecond precision")
 	}
-	if event.Layer < 0 || strings.ContainsAny(event.Style+event.Name+string(event.Effect), ",\r\n\x00") ||
-		strings.ContainsAny(event.Text, "\r\n\x00") {
-		return nil, ctxerrors.Wrap(ErrInvalidValue, "invalid event fields, use \\N for a subtitle line break")
+	if event.Layer < 0 || event.MarginL < 0 || event.MarginR < 0 || event.MarginV < 0 ||
+		strings.ContainsAny(event.Style+event.Name+string(event.Effect), fieldDelimiters) ||
+		strings.ContainsAny(event.Text, lineBreakChars) {
+		return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "invalid event fields, use %s for a subtitle line break", lineBreakTag)
 	}
 
 	tags, err := event.Override.Tags()
@@ -153,48 +198,95 @@ func eventFields(event Event, wrap WrapStyle) ([]string, error) {
 }
 
 func formatTime(value time.Duration) string {
-	return fmt.Sprintf("%d:%02d:%02d.%02d", value/time.Hour, value/time.Minute%60,
-		value/time.Second%60, value/(10*time.Millisecond)%100)
+	return fmt.Sprintf("%d:%02d:%02d.%02d", value/time.Hour, value/time.Minute%minutesPerHour,
+		value/time.Second%secondsPerMinute, value/centisecond%centisPerSecond)
 }
 
-// MarshalText writes a new v4+ ASS script from typed values.
+// MarshalText writes a new v4+ ASS script from typed values. Custom Info headers
+// replace the generated defaults of the same name and follow them in sorted order.
 func (s Script) MarshalText() ([]byte, error) {
-	if s.Resolution.Width <= 0 || s.Resolution.Height <= 0 || strings.ContainsAny(s.Title, "\r\n\x00") {
-		return nil, ctxerrors.Wrap(ErrInvalidValue, "script needs a positive resolution and a single-line title")
+	if s.Resolution.Width <= 0 || s.Resolution.Height <= 0 ||
+		s.Resolution.Width > maxScriptDimension || s.Resolution.Height > maxScriptDimension ||
+		strings.ContainsAny(s.Title, lineBreakChars) {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "script needs a positive resolution and a single-line title")
 	}
-	lines := []string{
-		"[Script Info]", "Title: " + s.Title, "ScriptType: v4.00+", "ScaledBorderAndShadow: yes",
-		"YCbCr Matrix: None", "PlayResX: " + integer(s.Resolution.Width),
-		"PlayResY: " + integer(s.Resolution.Height), "", "[V4+ Styles]", "Format: " + styleFormat,
+	headers, err := s.infoHeaders()
+	if err != nil {
+		return nil, ctxerrors.Wrap(err, "write script headers")
 	}
+
+	lines := []string{headerScriptInfo, infoTitle + headerSeparator + s.Title, infoScriptType + headerSeparator + scriptTypeV4Plus}
+	for _, key := range slices.Sorted(maps.Keys(headers)) {
+		lines = append(lines, headers[key].name+headerSeparator+headers[key].value)
+	}
+	lines = append(lines,
+		infoPlayResX+headerSeparator+integer(s.Resolution.Width),
+		infoPlayResY+headerSeparator+integer(s.Resolution.Height),
+		"", headerStyles, recordFormat+headerSeparator+strings.Join(styleColumns, formatSeparator),
+	)
 
 	styles := make(map[string]WrapStyle, len(s.Styles))
 	for _, style := range s.Styles {
 		if _, exists := styles[style.Name]; exists {
-			return nil, ctxerrors.Wrapf(ErrInvalidValue, "duplicate style %q", style.Name)
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "duplicate style %q", style.Name)
 		}
 		fields, err := styleFields(style)
 		if err != nil {
 			return nil, ctxerrors.Wrap(err, "write ASS style")
 		}
 		styles[style.Name] = style.WrapStyle
-		lines = append(lines, "Style: "+strings.Join(fields, ","))
+		lines = append(lines, recordStyle+headerSeparator+strings.Join(fields, fieldSeparator))
 	}
 
-	lines = append(lines, "", "[Events]", "Format: "+eventFormat)
+	lines = append(lines, "", headerEvents, recordFormat+headerSeparator+strings.Join(eventColumns, formatSeparator))
 	for index, event := range s.Events {
 		wrap, exists := styles[event.Style]
 		if !exists {
-			return nil, ctxerrors.Wrapf(ErrNotFound, "event %d refers to style %q", index+1, event.Style)
+			return nil, ctxerrors.Wrapf(commerr.ErrNotFound, "event %d refers to style %q", index+1, event.Style)
 		}
 		fields, err := eventFields(event, wrap)
 		if err != nil {
 			return nil, ctxerrors.Wrapf(err, "write event %d", index+1)
 		}
-		lines = append(lines, "Dialogue: "+strings.Join(fields, ","))
+		kind := recordDialogue
+		if event.Comment {
+			kind = recordComment
+		}
+		lines = append(lines, kind+headerSeparator+strings.Join(fields, fieldSeparator))
 	}
 
-	return []byte(strings.Join(lines, "\n") + "\n"), nil
+	content := strings.Join(lines, "\n") + "\n"
+	if !utf8.ValidString(content) {
+		return nil, ctxerrors.Wrap(commerr.ErrInvalidValue, "ASS text must be valid UTF-8")
+	}
+
+	return []byte(content), nil
+}
+
+// infoHeaders returns the generated default headers merged with s.Info, keyed by lowercase name.
+func (s Script) infoHeaders() (map[string]scriptHeader, error) {
+	headers := map[string]scriptHeader{
+		strings.ToLower(infoScaledBorderAndShadow): {name: infoScaledBorderAndShadow, value: scaledBorderOn},
+		strings.ToLower(infoYCbCrMatrix):           {name: infoYCbCrMatrix, value: ycbcrMatrixNone},
+	}
+	seen := make(map[string]bool, len(s.Info))
+	for key, value := range s.Info {
+		if strings.TrimSpace(key) != key || key == "" ||
+			strings.ContainsAny(key, headerKeyInvalid) || strings.ContainsAny(value, lineBreakChars) {
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "invalid script header %q", key)
+		}
+		lower := strings.ToLower(key)
+		if seen[lower] {
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "duplicate case-insensitive script header %q", key)
+		}
+		seen[lower] = true
+		if slices.ContainsFunc(typedHeaders, func(typed string) bool { return strings.EqualFold(typed, key) }) {
+			return nil, ctxerrors.Wrapf(commerr.ErrInvalidValue, "header %q has a typed Script field", key)
+		}
+		headers[lower] = scriptHeader{name: key, value: value}
+	}
+
+	return headers, nil
 }
 
 // Encode writes an ASS script to w.
@@ -203,8 +295,12 @@ func (s Script) Encode(w io.Writer) error {
 	if err != nil {
 		return ctxerrors.Wrap(err, "encode ASS script")
 	}
-	if _, err := w.Write(content); err != nil {
+	written, err := w.Write(content)
+	if err != nil {
 		return ctxerrors.Wrap(err, "write ASS script")
+	}
+	if written != len(content) {
+		return ctxerrors.Wrap(io.ErrShortWrite, "write complete ASS script")
 	}
 
 	return nil

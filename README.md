@@ -35,12 +35,13 @@ assctl fonts-install
 ```bash
 assctl inspect captions.ass
 assctl theme --preset ivory-navy --output styled.ass captions.ass
+assctl position --text-position portrait-lower-middle --output moved.ass styled.ass
 assctl validate styled.ass
 ```
 
 `theme` updates the style definitions and preserves the original dialogue, event timing, inline tags, and unrelated sections. Use `--style NAME` to theme just one style. Use `-` to read or write through a pipe.
 
-`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
+`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. `tags` generates override blocks for karaoke, drawing, fades, clipping, and animation. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
 
 ## Presets
 
@@ -52,8 +53,19 @@ Pick a whole look, including the font, colors, background, outline, shadow, and 
 | `ivory-navy` | Ivory serif text, navy box | Sky blue |
 | `mint-plum` | Bold mint text, plum box | Peach |
 | `clean` | White text, black outline, clear background | Sky blue |
+| `tiktok-bold` | TikTok Sans Bold, white with a black outline, lower-middle | Yellow |
+| `reels-bold` | Barlow Condensed ExtraBold, white with a black outline, lower-middle | Yellow |
+| `shorts-impact` | Anton, yellow with a black outline, lower-middle | White |
+| `social-center` | Anton, white with a black outline, centered | Yellow |
+| `social-box` | TikTok Sans Bold, white on translucent black, lower-middle | Yellow |
+| `social-hook` | Barlow Condensed ExtraBold, yellow with a black outline, upper-center | White |
+| `the-bold` | THE BOLD FONT free version, white with a black outline, lower-middle | Yellow |
 
 Run `assctl presets --json` to see the full values. Use one of those objects as a starting point for `--theme-file` with `captions` or `theme`. Inline overrides in an existing subtitle still take effect.
+
+Social presets leave room for app controls and scale their margins with your script resolution. Fonts download from their upstream sources through `fonts-install`. See [font licenses, source downloads, and positioning](https://psyb0t.github.io/assctl/presets/).
+
+Use `--text-position` with `captions`, `create`, or `theme` to choose placement independently of appearance. `assctl positions` lists the layouts. Existing event positioning still takes precedence. See [text positions](https://psyb0t.github.io/assctl/positions/).
 
 ## Go package
 
@@ -86,6 +98,8 @@ The [assctl documentation](https://psyb0t.github.io/assctl/) covers the CLI and 
 | [Installation](https://psyb0t.github.io/assctl/install/) | Install, update, and prepare fonts |
 | [CLI](https://psyb0t.github.io/assctl/cli/) | Commands, flags, and JSON examples |
 | [Presets and fonts](https://psyb0t.github.io/assctl/presets/) | Palettes, backgrounds, and user font directories |
+| [Text positions](https://psyb0t.github.io/assctl/positions/) | Independent placement, margins, and override precedence |
+| [ASS features](https://psyb0t.github.io/assctl/ass-features/) | Tags, drawing, karaoke, headers, and wrapping modes |
 | [Go library](https://psyb0t.github.io/assctl/go/) | Create and edit scripts in Go |
 | [Agents](https://psyb0t.github.io/assctl/agents/) | Skills and plugin setup |
 | [Troubleshooting](https://psyb0t.github.io/assctl/troubleshooting/) | Input, font, and output errors |

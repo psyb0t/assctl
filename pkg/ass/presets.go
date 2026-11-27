@@ -2,17 +2,34 @@ package ass
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/ctxerrors/commerr"
+)
+
+// Preset names referenced outside the preset table.
+const (
+	PresetBlackGold = "black-gold"
+	// DefaultPreset is the look used when a caller does not choose one.
+	DefaultPreset = PresetBlackGold
 )
 
 const (
-	blackGoldPreset = "black-gold"
-	inlineASSChars  = "{\\"
-	fallbackHeight  = 1080
+	inlineASSChars      = "{\\"
+	textStyleName       = "Text"
+	backgroundStyleName = "Background"
+	wordSeparator       = " "
+	// Highlight and fill colors shared by several built-in looks.
+	colorCaptionYellow Color = "&H0000E8FF"
+	alphaLightBox      Alpha = "&H20&"
 )
+
+// themeColumns are the style columns a preset replaces. Side margins are added when the preset sets them.
+var themeColumns = []string{
+	columnFontname, columnFontsize, columnPrimaryColour, columnSecondaryColour, columnOutlineColour,
+	columnBackColour, columnBold, columnBorderStyle, columnOutline, columnShadow, columnAlignment, columnMarginV,
+}
 
 // Preset sets the complete look of a subtitle style. Ratios are relative to script height.
 type Preset struct {
@@ -25,6 +42,7 @@ type Preset struct {
 	BackgroundAlpha Alpha
 	FontRatio       float64
 	MarginRatio     float64
+	SideMarginRatio float64
 	Outline         float64
 	Shadow          float64
 	Padding         float64
@@ -35,28 +53,70 @@ type Preset struct {
 func presets() []Preset {
 	return []Preset{
 		{
-			Name: blackGoldPreset, Font: "DejaVu Sans", Text: ColorWhite, Highlight: "&H0053D4FF",
+			Name: PresetBlackGold, Font: FontDejaVuSans, Text: ColorWhite, Highlight: "&H0053D4FF",
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaOpaque,
 			FontRatio: 0.04, MarginRatio: 0.1, Outline: 2.5, Shadow: 1, Padding: 5,
 			Bold: true, Alignment: AlignmentBottomCenter,
 		},
 		{
-			Name: "ivory-navy", Font: "DejaVu Serif", Text: "&H00E8F7FF", Highlight: "&H00FFCD88",
+			Name: "ivory-navy", Font: FontDejaVuSerif, Text: "&H00E8F7FF", Highlight: "&H00FFCD88",
 			Background: "&H00412A15", OutlineColor: "&H00301D0C", BackgroundAlpha: "&H18&",
 			FontRatio: 0.043, MarginRatio: 0.085, Outline: 2, Shadow: 1.5, Padding: 5,
 			Alignment: AlignmentBottomCenter,
 		},
 		{
-			Name: "mint-plum", Font: "DejaVu Sans Mono", Text: "&H00C3FDD1", Highlight: "&H00A5C2FF",
-			Background: "&H004E2140", OutlineColor: "&H0032182D", BackgroundAlpha: "&H20&",
+			Name: "mint-plum", Font: FontDejaVuSansMono, Text: "&H00C3FDD1", Highlight: "&H00A5C2FF",
+			Background: "&H004E2140", OutlineColor: "&H0032182D", BackgroundAlpha: alphaLightBox,
 			FontRatio: 0.038, MarginRatio: 0.11, Outline: 2, Shadow: 1, Padding: 6,
 			Bold: true, Alignment: AlignmentBottomCenter,
 		},
 		{
-			Name: "clean", Font: "DejaVu Sans", Text: ColorWhite, Highlight: ColorSkyBlue,
+			Name: "clean", Font: FontDejaVuSans, Text: ColorWhite, Highlight: ColorSkyBlue,
 			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
 			FontRatio: 0.036, MarginRatio: 0.06, Outline: 3, Shadow: 1.5,
 			Alignment: AlignmentBottomCenter,
+		},
+		{
+			Name: "tiktok-bold", Font: FontTikTokSans, Text: ColorWhite, Highlight: colorCaptionYellow,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Bold: true, Alignment: AlignmentBottomCenter,
+		},
+		{
+			Name: "reels-bold", Font: FontBarlowCondensedExtraBold, Text: ColorWhite, Highlight: colorCaptionYellow,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.048, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Alignment: AlignmentBottomCenter,
+		},
+		{
+			Name: "shorts-impact", Font: FontAnton, Text: colorCaptionYellow, Highlight: ColorWhite,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.045, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Alignment: AlignmentBottomCenter,
+		},
+		{
+			Name: "social-center", Font: FontAnton, Text: ColorWhite, Highlight: colorCaptionYellow,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.045, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Alignment: AlignmentMiddleCenter,
+		},
+		{
+			Name: "social-box", Font: FontTikTokSans, Text: ColorWhite, Highlight: colorCaptionYellow,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: alphaLightBox,
+			FontRatio: 0.04, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 2, Shadow: 0, Padding: 8, Bold: true, Alignment: AlignmentBottomCenter,
+		},
+		{
+			Name: "social-hook", Font: FontBarlowCondensedExtraBold, Text: colorCaptionYellow, Highlight: ColorWhite,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.05, MarginRatio: socialUpperMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Alignment: AlignmentTopCenter,
+		},
+		{
+			Name: "the-bold", Font: FontTheBold, Text: ColorWhite, Highlight: colorCaptionYellow,
+			Background: ColorBlack, OutlineColor: ColorBlack, BackgroundAlpha: AlphaTransparent,
+			FontRatio: 0.042, MarginRatio: socialLowerMarginRatio, SideMarginRatio: socialSideMarginRatio,
+			Outline: 4, Shadow: 0, Bold: true, Alignment: AlignmentBottomCenter,
 		},
 	}
 }
@@ -64,7 +124,7 @@ func presets() []Preset {
 // Presets returns the built-in looks in display order.
 func Presets() []Preset { return presets() }
 
-// LookupPreset returns the requested look.
+// LookupPreset returns the requested look, or an error wrapping commerr.ErrNotFound.
 func LookupPreset(name string) (Preset, error) {
 	for _, preset := range presets() {
 		if preset.Name == name {
@@ -72,10 +132,10 @@ func LookupPreset(name string) (Preset, error) {
 		}
 	}
 
-	return Preset{}, ctxerrors.Wrapf(ErrNotFound, "preset %q", name)
+	return Preset{}, ctxerrors.Wrapf(commerr.ErrNotFound, "preset %q", name)
 }
 
-func (p Preset) foreground(name string, height int) Style {
+func (p Preset) foreground(name string, width, height int) Style {
 	return Style{
 		Name: name, FontName: p.Font, FontSize: float64(height) * p.FontRatio,
 		PrimaryColor: p.Text, SecondColor: p.Highlight, OutlineColor: p.OutlineColor,
@@ -83,6 +143,7 @@ func (p Preset) foreground(name string, height int) Style {
 		ScaleX: standardScale, ScaleY: standardScale, BorderStyle: BorderStyleOutlineDropShadow,
 		Outline: p.Outline, Shadow: p.Shadow, Alignment: p.Alignment,
 		MarginV: int(float64(height) * p.MarginRatio), Encoding: EncodingDefault,
+		MarginL: int(float64(width) * p.SideMarginRatio), MarginR: int(float64(width) * p.SideMarginRatio),
 	}
 }
 
@@ -95,22 +156,18 @@ func (p Preset) box(style Style) Style {
 
 // Theme replaces the selected style fields. A blank name applies the preset to every style.
 func (d *Document) Theme(preset Preset, name string) (*Document, error) {
-	height := fallbackHeight
-	if item, ok := d.info["playresy"]; ok {
-		value, err := strconv.Atoi(strings.TrimSpace(item.values[0]))
-		if err == nil && value > 0 {
-			height = value
-		}
+	width, height, err := d.resolution()
+	if err != nil {
+		return nil, ctxerrors.Wrap(err, "resolve theme canvas")
 	}
 
 	edit := Edit{Styles: make([]StyleEdit, 0, len(d.styles))}
-	columns := strings.Split(styleFormat, ", ")
 	for _, row := range d.styles {
-		styleName := strings.TrimSpace(row.field("Name"))
+		styleName := strings.TrimSpace(row.field(columnName))
 		if name != "" && name != styleName {
 			continue
 		}
-		style := preset.foreground(styleName, height)
+		style := preset.foreground(styleName, width, height)
 		if preset.BackgroundAlpha != AlphaTransparent {
 			style = preset.box(style)
 		}
@@ -118,20 +175,25 @@ func (d *Document) Theme(preset Preset, name string) (*Document, error) {
 		if err != nil {
 			return nil, ctxerrors.Wrap(err, "render theme style")
 		}
+		columns := themeColumns
+		if preset.SideMarginRatio != 0 {
+			columns = append(slices.Clone(themeColumns), columnMarginL, columnMarginR)
+		}
 		fields := make(map[string]string, len(columns))
-		for _, column := range []string{
-			"Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour",
-			"BackColour", "Bold", "BorderStyle", "Outline", "Shadow", "Alignment", "MarginV",
-		} {
-			fields[column] = values[slices.Index(columns, column)]
+		for _, column := range columns {
+			fields[column] = values[slices.Index(styleColumns, column)]
 		}
 		edit.Styles = append(edit.Styles, StyleEdit{Name: styleName, Fields: fields})
 	}
 	if len(edit.Styles) == 0 {
-		return nil, ctxerrors.Wrapf(ErrNotFound, "style %q", name)
+		return nil, ctxerrors.Wrapf(commerr.ErrNotFound, "style %q", name)
+	}
+	updated, err := d.Apply(edit)
+	if err != nil {
+		return nil, ctxerrors.Wrap(err, "apply theme")
 	}
 
-	return d.Apply(edit)
+	return updated, nil
 }
 
 // CaptionSpec supplies timed lines and the visual settings for a new caption script.
@@ -147,9 +209,9 @@ type CaptionSpec struct {
 // Captions builds timed captions with separate text and background layers when the preset has a box.
 func (p Preset) Captions(spec CaptionSpec) Script {
 	script := NewScript(spec.Title, spec.Width, spec.Height)
-	text := p.foreground("Text", spec.Height)
+	text := p.foreground(textStyleName, spec.Width, spec.Height)
 	script.AddStyle(text)
-	background := p.box(p.foreground("Background", spec.Height))
+	background := p.box(p.foreground(backgroundStyleName, spec.Width, spec.Height))
 	boxVisible := p.BackgroundAlpha != AlphaTransparent
 	if boxVisible {
 		background.PrimaryAlpha = AlphaTransparent
@@ -191,9 +253,9 @@ func wrapWords(text string, limit int) string {
 	wrapped := make([]string, 0, lines)
 	for count := lines; count > 0; count-- {
 		size := (len(words) + count - 1) / count
-		wrapped = append(wrapped, strings.Join(words[:size], " "))
+		wrapped = append(wrapped, strings.Join(words[:size], wordSeparator))
 		words = words[size:]
 	}
 
-	return strings.Join(wrapped, "\\N")
+	return strings.Join(wrapped, lineBreakTag)
 }

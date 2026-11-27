@@ -14,6 +14,9 @@ description: Commands, flags, JSON formats, file editing, and shell completion.
 | `edit --spec FILE --output FILE INPUT` | Apply a JSON `ass.Edit` to an existing script. |
 | `theme --preset NAME --output FILE INPUT` | Apply a named look. Add `--style NAME` to restrict it to one style. |
 | `presets --json` | Print the full values for all presets. |
+| `positions --json` | List independent caption layouts and their ratios. |
+| `position INPUT --text-position NAME --output FILE` | Replace style alignment and margins. Add `--style NAME` to select one style. |
+| `tags --spec FILE` | Print a typed ASS override block from JSON. |
 | `version` or `--version` | Print the installed version. |
 | `completion SHELL` | Generate completion for Bash, Zsh, Fish, or PowerShell. |
 | `fonts-install --preset NAME` | Install one built-in preset's required fonts. Omit the flag for all presets. |
@@ -21,6 +24,10 @@ description: Commands, flags, JSON formats, file editing, and shell completion.
 Flags can appear before or after the positional input. Run `assctl COMMAND --help` for command-specific options. `--output` defaults to stdout and accepts `-`. `create` and `captions` default to stdin for their JSON specs. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
 
 The command tree and help use Cobra. Run `assctl completion SHELL --help` for installation instructions for your shell.
+
+JSON specs must contain exactly one object. Unknown fields, duplicate field names ignoring case, trailing values, and nesting beyond 64 levels are rejected. Typed strings must produce valid UTF-8 ASS output.
+
+`create`, `captions`, and `theme` accept `--text-position NAME`. See [text positions](positions.md) for geometry and override precedence, and [ASS features](ass-features.md) for typed tags, script headers, comments, and wrapping modes.
 
 ## Build captions from timed text
 

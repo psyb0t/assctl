@@ -2,10 +2,9 @@ package ass
 
 import "errors"
 
-// Errors reported by the reader and editor.
+// Errors specific to ASS documents. Missing entries wrap commerr.ErrNotFound and
+// rejected values wrap commerr.ErrInvalidValue from github.com/psyb0t/ctxerrors/commerr.
 var (
 	ErrInvalidDocument = errors.New("invalid ASS document")
-	ErrInvalidValue    = errors.New("invalid ASS value")
-	ErrNotFound        = errors.New("ASS entry not found")
 	ErrInputTooLarge   = errors.New("ASS input exceeds 64 MiB")
 )

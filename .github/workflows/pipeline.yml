@@ -19,7 +19,7 @@ jobs:
     with:
       build_command: "make build"
       lint_command: "make lint"
-      test_command: "make test-coverage"
+      test_command: "make test-coverage test-fuzz test-real"
       sec_command: "make sec"
       coverage_file: "coverage-percent.txt"
       sarif_file: "sec.sarif"

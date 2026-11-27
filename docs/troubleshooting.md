@@ -11,13 +11,13 @@ Run `assctl fonts-install` on the machine that renders your subtitles. Check the
 
 ## The font download fails
 
-A first install requires access to the pinned DejaVu release on GitHub. Restore connectivity and retry. Verified installed files are reused offline. Checksum failures stop installation before files are changed.
+A first install requires access to the selected font's pinned upstream download. Sources include GitHub and DaFont. Restore connectivity and retry. Verified installed files are reused offline. Checksum failures stop installation before files are changed.
 
 ## Validation rejects the file
 
 Input must be UTF-8 ASS v4+ with a `[Script Info]` section. Each record must match its section's `Format:` columns. Event text goes last. Styles need distinct, nonempty names. Events must reference an existing style, and end after they start. Validation errors identify the rejected line.
 
-Input is limited to 64 MiB. Use `\N` in ASS text for a line break, escaped as `\N` inside a JSON string.
+Input is limited to 64 MiB. Use `\N` in ASS text for a line break, escaped as `\\N` inside a JSON string.
 
 ## Event timing is rejected
 

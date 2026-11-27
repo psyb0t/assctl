@@ -1,1 +1,1 @@
-export default { docs: ["index", "install", "cli", "presets", "go", "agents", "troubleshooting", "development"] };
+export default { docs: ["index", "install", "cli", "presets", "positions", "ass-features", "go", "agents", "troubleshooting", "development"] };

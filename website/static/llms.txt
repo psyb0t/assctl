@@ -7,6 +7,8 @@
 - [CLI guide](https://psyb0t.github.io/assctl/cli/): Commands, flags, JSON formats, file editing, and shell completion.
 - [Presets and fonts](https://psyb0t.github.io/assctl/presets/): Choose a complete look and install the fonts required by built-in presets.
 - [Go library](https://psyb0t.github.io/assctl/go/): Read, write, validate, and edit ASS scripts through the public Go package.
+- [Text positions](https://psyb0t.github.io/assctl/positions/): Independent layouts, margins, and override precedence.
+- [ASS features](https://psyb0t.github.io/assctl/ass-features/): Typed tags, drawing, karaoke, headers, and wrapping modes.
 - [Agent integrations](https://psyb0t.github.io/assctl/agents/): Use the assctl skill with Claude Code, Codex, and OpenClaw.
 - [Troubleshooting](https://psyb0t.github.io/assctl/troubleshooting/): Fix rejected input, invalid timings, missing fonts, and failed writes.
 - [Development](https://psyb0t.github.io/assctl/development/): Build and test assctl and its Docusaurus documentation in Docker.

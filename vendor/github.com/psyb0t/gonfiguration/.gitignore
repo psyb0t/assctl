@@ -1,0 +1,7 @@
+.vscode
+coverage.*
+git-update.sh
+coverage-percent.txt
+.telemetry/
+*.local.json
+.testing/

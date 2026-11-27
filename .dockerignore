@@ -7,3 +7,4 @@
 git-update.sh
 git-update.sh.debot
 bin
+.telemetry/

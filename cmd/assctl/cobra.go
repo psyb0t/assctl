@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/ctxerrors/commerr"
 
 	"github.com/psyb0t/assctl/internal/pkg/fonts"
 	"github.com/psyb0t/assctl/pkg/ass"
@@ -12,8 +15,9 @@ import (
 func exactArgs(count int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if err := cobra.ExactArgs(count)(cmd, args); err != nil {
-			return ctxerrors.Wrap(errUsage, err.Error())
+			return ctxerrors.Wrap(errors.Join(commerr.ErrInvalidArgument, err), "check arguments")
 		}
+
 		return nil
 	}
 }
@@ -28,7 +32,8 @@ func (c cli) rootCommand() *cobra.Command {
 			if showVersion {
 				return c.version()
 			}
-			return cmd.Help()
+
+			return showHelp(cmd)
 		},
 	}
 	root.Flags().BoolVar(&showVersion, "version", false, "Print the installed version")
@@ -37,6 +42,7 @@ func (c cli) rootCommand() *cobra.Command {
 		c.inspectCommand(false), c.inspectCommand(true),
 		c.editCommand(), c.themeCommand(), c.presetsCommand(),
 		c.fontsCommand(),
+		c.positionsCommand(), c.positionCommand(), c.tagsCommand(),
 		&cobra.Command{
 			Use: "version", Short: "Print the installed version", Args: exactArgs(0),
 			RunE: func(_ *cobra.Command, _ []string) error { return c.version() },
@@ -47,7 +53,7 @@ func (c cli) rootCommand() *cobra.Command {
 	for _, command := range root.Commands() {
 		if command.Name() == "completion" {
 			command.Args = exactArgs(0)
-			command.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+			command.RunE = func(cmd *cobra.Command, _ []string) error { return showHelp(cmd) }
 		}
 	}
 	return root
@@ -70,7 +76,11 @@ func (c cli) fontsCommand() *cobra.Command {
 			if err != nil {
 				return ctxerrors.Wrap(err, "install fonts")
 			}
-			return writeString(c.output, directory+"\n")
+			if err := writeString(c.output, directory+"\n"); err != nil {
+				return ctxerrors.Wrap(err, "print font directory")
+			}
+
+			return nil
 		},
 	}
 	command.Flags().StringVar(&name, "preset", "", "Install one preset's fonts, or omit for every built-in preset")
@@ -82,17 +92,22 @@ func (c cli) createCommand(captions bool) *cobra.Command {
 	if captions {
 		name, description = "captions", "Style timed captions using a preset or custom theme"
 	}
-	var spec, output, preset, theme string
+	var spec, output, preset, theme, position string
 	command := &cobra.Command{
 		Use: name, Short: description, Args: exactArgs(0),
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return c.create(spec, output, captions, preset, theme)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("text-position") && position == "" {
+				return ctxerrors.Wrap(commerr.ErrInvalidArgument, "--text-position cannot be empty")
+			}
+
+			return c.create(spec, output, captions, preset, theme, position)
 		},
 	}
 	command.Flags().StringVar(&spec, "spec", stream, "JSON file or - for stdin")
 	command.Flags().StringVar(&output, "output", stream, "ASS file or - for stdout")
+	command.Flags().StringVar(&position, "text-position", "", "Named style placement; existing event positions are preserved")
 	if captions {
-		command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+presetDefault+")")
+		command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
 		command.Flags().StringVar(&theme, "theme-file", "", "JSON file with custom preset values")
 	}
 	return command
@@ -121,17 +136,56 @@ func (c cli) editCommand() *cobra.Command {
 }
 
 func (c cli) themeCommand() *cobra.Command {
-	var preset, custom, style, output string
+	var preset, custom, style, output, position string
 	command := &cobra.Command{
 		Use: "theme INPUT", Short: "Apply a preset or custom theme to existing styles", Args: exactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.theme(preset, custom, style, output, args[0])
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("text-position") && position == "" {
+				return ctxerrors.Wrap(commerr.ErrInvalidArgument, "--text-position cannot be empty")
+			}
+
+			return c.theme(preset, custom, style, output, args[0], position)
 		},
 	}
-	command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+presetDefault+")")
+	command.Flags().StringVar(&preset, "preset", "", "Built-in preset (default "+ass.DefaultPreset+")")
 	command.Flags().StringVar(&custom, "theme-file", "", "JSON file with custom preset values")
 	command.Flags().StringVar(&style, "style", "", "Theme one named style, or omit to theme every style")
 	command.Flags().StringVar(&output, "output", stream, "ASS file or - for stdout")
+	command.Flags().StringVar(&position, "text-position", "", "Named style placement; existing event positions are preserved")
+	return command
+}
+
+func (c cli) positionsCommand() *cobra.Command {
+	var showJSON bool
+	command := &cobra.Command{
+		Use: "positions", Short: "List named relative text placements", Args: exactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error { return c.positions(showJSON) },
+	}
+	command.Flags().BoolVar(&showJSON, "json", false, "Include alignments and normalized margins")
+	return command
+}
+
+func (c cli) positionCommand() *cobra.Command {
+	var position, style, output string
+	command := &cobra.Command{
+		Use: "position INPUT", Short: "Change style placement while preserving appearance and event overrides", Args: exactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return c.position(position, style, output, args[0])
+		},
+	}
+	command.Flags().StringVar(&position, "text-position", "", "Named text position (required)")
+	command.Flags().StringVar(&style, "style", "", "Position one style, or omit for every style")
+	command.Flags().StringVar(&output, "output", stream, "ASS file or - for stdout")
+	return command
+}
+
+func (c cli) tagsCommand() *cobra.Command {
+	var spec string
+	command := &cobra.Command{
+		Use: "tags", Short: "Encode typed override JSON as an ASS tag block", Args: exactArgs(0),
+		RunE: func(_ *cobra.Command, _ []string) error { return c.tags(spec) },
+	}
+	command.Flags().StringVar(&spec, "spec", stream, "Override JSON file or - for stdin")
 	return command
 }
 
@@ -143,4 +197,12 @@ func (c cli) presetsCommand() *cobra.Command {
 	}
 	command.Flags().BoolVar(&showJSON, "json", false, "Include fonts, colors, and other settings")
 	return command
+}
+
+func showHelp(cmd *cobra.Command) error {
+	if err := cmd.Help(); err != nil {
+		return ctxerrors.Wrap(err, "print help")
+	}
+
+	return nil
 }

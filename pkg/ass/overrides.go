@@ -5,11 +5,17 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/psyb0t/ctxerrors"
+	"github.com/psyb0t/ctxerrors/commerr"
 )
 
-const maxTransformDepth = 16
+const (
+	maxTransformDepth   = 16
+	defaultClipScale    = 1
+	defaultAcceleration = 1
+)
 
 // Tags encodes the override as a leading ASS tag block.
 func (o *Override) Tags() (string, error) {
@@ -20,6 +26,9 @@ func (o *Override) Tags() (string, error) {
 	if payload == "" {
 		return "", nil
 	}
+	if !utf8.ValidString(payload) {
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "ASS override must be valid UTF-8")
+	}
 
 	return "{" + payload + "}", nil
 }
@@ -29,10 +38,13 @@ func (o *Override) tags(depth int) (string, error) {
 		return "", nil
 	}
 	if depth >= maxTransformDepth {
-		return "", ctxerrors.Wrap(ErrInvalidValue, "override has too many nested transforms")
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "override has too many nested transforms")
 	}
-	if o.FontName != nil && strings.ContainsAny(*o.FontName, "{}\\\r\n\x00") {
-		return "", ctxerrors.Wrap(ErrInvalidValue, "font name contains an ASS delimiter")
+	if err := o.validate(); err != nil {
+		return "", ctxerrors.Wrap(err, "validate ASS override")
+	}
+	if o.FontName != nil && strings.ContainsAny(*o.FontName, tagDelimiterChars) {
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "font name contains an ASS delimiter")
 	}
 
 	colors, err := o.colorTags()
@@ -44,7 +56,31 @@ func (o *Override) tags(depth int) (string, error) {
 		return "", ctxerrors.Wrap(err, "format numeric overrides")
 	}
 
-	parts := []string{o.positionTags(), o.fontTags(), colors, numeric}
+	parts := appendValue([]string{}, "r", o.ResetStyle)
+	parts = append(parts, o.positionTags(), o.fontTags(), colors, numeric)
+	parts = appendValue(parts, "fe", o.Encoding)
+	parts = appendValue(parts, "be", o.BlurEdges)
+	parts = appendValue(parts, "p", o.DrawingMode)
+	if o.SimpleFade != nil {
+		parts = append(parts, fmt.Sprintf("\\fad(%d,%d)", o.SimpleFade.In.Milliseconds(), o.SimpleFade.Out.Milliseconds()))
+	}
+	if o.KaraokeStart != nil {
+		parts = append(parts, fmt.Sprintf("\\kt%d", *o.KaraokeStart/centisecond))
+	}
+	if o.Karaoke != nil {
+		mode := o.Karaoke.Mode
+		if mode == "" {
+			mode = KaraokeInstant
+		}
+		parts = append(parts, fmt.Sprintf("\\%s%d", mode, o.Karaoke.Duration/centisecond))
+	}
+	if clip := o.VectorClip; clip != nil {
+		scale := clip.Scale
+		if scale == 0 {
+			scale = defaultClipScale
+		}
+		parts = append(parts, fmt.Sprintf("\\%s(%d,%s)", clipName(clip.Inverse), scale, clip.Drawing))
+	}
 	if o.Fade != nil {
 		fade := o.Fade
 		parts = append(parts, fmt.Sprintf("\\fade(%d,%d,%d,%d,%d,%d,%d)",
@@ -59,16 +95,20 @@ func (o *Override) tags(depth int) (string, error) {
 		parts = append(parts, part)
 	}
 	if clip := o.Clip; clip != nil {
-		name := "clip"
-		if clip.Inverse {
-			name = "iclip"
-		}
-		parts = append(parts, fmt.Sprintf("\\%s(%s,%s,%s,%s)", name,
+		parts = append(parts, fmt.Sprintf("\\%s(%s,%s,%s,%s)", clipName(clip.Inverse),
 			number(clip.X1), number(clip.Y1), number(clip.X2), number(clip.Y2)))
 	}
 	parts = appendValue(parts, "q", o.WrapStyle)
 
 	return strings.Join(parts, ""), nil
+}
+
+func clipName(inverse bool) string {
+	if inverse {
+		return inverseClipTag
+	}
+
+	return clipTag
 }
 
 func (o *Override) positionTags() string {
@@ -92,10 +132,11 @@ func (o *Override) positionTags() string {
 }
 
 func appendValue[T ~int | ~string](parts []string, tag string, value *T) []string {
-	if value != nil {
-		return append(parts, fmt.Sprintf("\\%s%v", tag, *value))
+	if value == nil {
+		return parts
 	}
-	return parts
+
+	return append(parts, fmt.Sprintf("\\%s%v", tag, *value))
 }
 
 func (o *Override) fontTags() string {
@@ -109,9 +150,9 @@ func (o *Override) fontTags() string {
 		if item.val == nil {
 			continue
 		}
-		toggle := "0"
+		toggle := overrideFalse
 		if *item.val {
-			toggle = "1"
+			toggle = overrideTrue
 		}
 		parts = append(parts, "\\"+item.tag+toggle)
 	}
@@ -138,12 +179,18 @@ func (o *Override) numberTags() (string, error) {
 		{"fry", o.RotationY},
 		{"fax", o.ShearX},
 		{"fay", o.ShearY},
+		{"fsp", o.Spacing},
+		{"xbord", o.BorderX},
+		{"ybord", o.BorderY},
+		{"xshad", o.ShadowX},
+		{"yshad", o.ShadowY},
+		{"pbo", o.DrawingBaseline},
 	} {
 		if item.val == nil {
 			continue
 		}
 		if math.IsNaN(*item.val) || math.IsInf(*item.val, 0) {
-			return "", ctxerrors.Wrapf(ErrInvalidValue, "non-finite %s override", item.tag)
+			return "", ctxerrors.Wrapf(commerr.ErrInvalidValue, "non-finite %s override", item.tag)
 		}
 		parts = append(parts, "\\"+item.tag+number(*item.val))
 	}
@@ -166,7 +213,7 @@ func (o *Override) colorTags() (string, error) {
 		if err != nil {
 			return "", ctxerrors.Wrapf(err, "color tag %s", item.tag)
 		}
-		parts = append(parts, "\\"+item.tag+"&H"+color[4:]+"&")
+		parts = append(parts, "\\"+item.tag+hexPrefix+color[len(hexPrefix)+alphaHexLen:]+hexSuffix)
 	}
 
 	for _, item := range []struct {
@@ -186,13 +233,20 @@ func (o *Override) colorTags() (string, error) {
 		if err != nil {
 			return "", ctxerrors.Wrapf(err, "alpha tag %s", item.tag)
 		}
-		parts = append(parts, "\\"+item.tag+"&H"+color[2:4]+"&")
+		parts = append(parts, "\\"+item.tag+hexPrefix+color[len(hexPrefix):len(hexPrefix)+alphaHexLen]+hexSuffix)
 	}
 
 	return strings.Join(parts, ""), nil
 }
 
 func (a Transform) tags(depth int) (string, error) {
+	if o := a.Override; o != nil && (o.Position != nil || o.Movement != nil || o.Origin != nil ||
+		o.Alignment != nil || o.ResetStyle != nil || o.FontName != nil || o.Encoding != nil ||
+		o.Bold != nil || o.BoldWeight != nil || o.Italic != nil || o.Underline != nil || o.StrikeOut != nil ||
+		o.Fade != nil || o.SimpleFade != nil || o.Karaoke != nil || o.KaraokeStart != nil ||
+		o.WrapStyle != nil || o.DrawingMode != nil || o.DrawingBaseline != nil || o.VectorClip != nil || len(o.Transform) > 0) {
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "transform contains a tag ASS cannot animate")
+	}
 	payload, err := a.Override.tags(depth)
 	if err != nil {
 		return "", ctxerrors.Wrap(err, "format transform overrides")
@@ -201,12 +255,12 @@ func (a Transform) tags(depth int) (string, error) {
 		return "", nil
 	}
 	if a.Start < 0 || a.End < a.Start || math.IsNaN(a.Accel) || math.IsInf(a.Accel, 0) || a.Accel < 0 {
-		return "", ctxerrors.Wrap(ErrInvalidValue, "invalid transform timing or acceleration")
+		return "", ctxerrors.Wrap(commerr.ErrInvalidValue, "invalid transform timing or acceleration")
 	}
 
 	acceleration := a.Accel
 	if acceleration == 0 {
-		acceleration = 1
+		acceleration = defaultAcceleration
 	}
 
 	return fmt.Sprintf("\\t(%d,%d,%s,%s)", a.Start/time.Millisecond, a.End/time.Millisecond,

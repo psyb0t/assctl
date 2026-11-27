@@ -5,7 +5,7 @@ DEV_RUN := docker run --rm --init --cap-drop ALL --security-opt no-new-privilege
 	--user "$(UID):$(GID)" -e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/go-build \
 	-v "$(CURDIR):/work" -w /work
 
-.PHONY: all build check dep dev-image format lint sec test test-coverage
+.PHONY: all build check dep dev-image format lint lint-fix sec test test-unit test-integration test-coverage test-real test-fuzz help
 
 all: check
 
@@ -24,11 +24,29 @@ build: dev-image
 lint: dev-image
 	$(DEV_RUN) --network none $(DEV_IMAGE) golangci-lint run
 
+lint-fix: dev-image
+	$(DEV_RUN) --network none $(DEV_IMAGE) golangci-lint run --fix
+
 test: dev-image
-	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 ./...
+	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m ./...
+
+test-unit: dev-image
+	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -skip '^TestRender' ./...
+
+test-integration: dev-image
+	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -run '^TestRender' ./pkg/ass
+
+test-real: dev-image
+	$(DEV_RUN) -e ASSCTL_TEST_REAL_FONTS=1 $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -v -tags real -run '^TestReal' ./internal/pkg/fonts
+
+test-fuzz: dev-image
+	$(DEV_RUN) --network none $(DEV_IMAGE) sh -ec 'for name in FuzzParsePreservesBytes FuzzGeneratedOverrideRoundTrip; do go test -mod=vendor -race -run "^$$" -fuzz "^$$name$$" -fuzztime=10s -parallel=2 -timeout=2m ./pkg/ass; done'
 
 test-coverage: dev-image
-	$(DEV_RUN) --network none $(DEV_IMAGE) sh -ec 'go test -mod=vendor -race -count=1 -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk "/^total:/{print \$$NF}" > coverage-percent.txt && test -s coverage-percent.txt'
+	$(DEV_RUN) --network none $(DEV_IMAGE) sh -ec 'go test -mod=vendor -race -count=1 -timeout=5m -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk "/^total:/{print \$$NF; if (\$$NF+0 < 90) exit 1}" > coverage-percent.txt && test -s coverage-percent.txt'
+
+help:
+	@printf '%s\n' 'build: compile the CLI' 'check: lint, complete tests, and build' 'format: format Go sources' 'lint / lint-fix: check or fix lint' 'test: offline unit and real renderer tests' 'test-unit: offline tests without renders' 'test-integration: FFmpeg/libass render tests' 'test-coverage: complete offline suite, minimum 90%' 'test-real: download and render every preset font' 'test-fuzz: bounded parser and generated-script fuzzing' 'sec: secrets and Go vulnerability scans' 'docs: build documentation' 'dep: refresh vendored dependencies'
 
 sec: dev-image
 	docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true -v "$(CURDIR):/work:ro" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --config /work/.gitleaks.toml --redact --no-banner /work

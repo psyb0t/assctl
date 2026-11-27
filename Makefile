@@ -34,7 +34,7 @@ test-unit: dev-image
 	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -skip '^TestRender' ./...
 
 test-integration: dev-image
-	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -run '^TestRender' ./pkg/ass
+	$(DEV_RUN) --network none $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -run '^TestRender' ./...
 
 test-real: dev-image
 	$(DEV_RUN) -e ASSCTL_TEST_REAL_FONTS=1 $(DEV_IMAGE) go test -mod=vendor -race -count=1 -timeout=5m -v -tags real -run '^TestReal' ./internal/pkg/fonts ./cmd/assctl

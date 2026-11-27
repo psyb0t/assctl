@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.0 (2026-11-27)
+
+- Added `burn`, which draws an ASS file into a video with FFmpeg. Only the picture is encoded again, with the source's codec, resolution, frame rate, pixel format and color tags at a visually lossless default quality that `--crf` can change. Audio, other tracks, cover art, chapters and metadata are copied unchanged. It supports H.264, HEVC, VP9 and AV1 video, turns rotated phone videos upright before drawing, and needs `ffmpeg` and `ffprobe` on `PATH`, which the Docker image includes.
+
 ## v0.3.0 (2026-11-27)
 
 assctl now ships as the `psyb0t/assctl` Docker image, with FFmpeg and libass and every built-in preset's font already verified and installed, so it can create, check and burn captions with no Go, no font download and no network.

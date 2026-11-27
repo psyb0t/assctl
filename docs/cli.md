@@ -19,6 +19,7 @@ description: Commands, flags, JSON formats, file editing, and shell completion.
 | `tags --spec FILE` | Print a typed ASS override block from JSON. |
 | `safe-area INPUT --platform NAME` | Print a JSON list of styles and events whose margins reach under TikTok, Shorts or Reels buttons and captions, and fail when there are any. `NAME` is `all` (default), `tiktok`, `shorts` or `reels`. See [platform safe areas](positions.md#platform-safe-areas) for the fields. |
 | `safe-areas --json` | List the `tiktok`, `shorts` and `reels` safe areas and the combined `all` area. `--json` adds the edge ratios. |
+| `burn INPUT --subtitles FILE --output FILE` | Draw an ASS file into a video with FFmpeg, keeping its size, codec and other streams. See [burn captions into a video](#burn-captions-into-a-video). |
 | `version` or `--version` | Print the installed version. |
 | `completion SHELL` | Generate completion for Bash, Zsh, Fish, or PowerShell. |
 | `fonts-install --preset NAME` | Install one built-in preset's required fonts. Omit the flag for all presets. |
@@ -138,6 +139,31 @@ Give `create` a JSON `ass.Script` with `Title`, `Resolution`, `Styles`, and `Eve
   ]
 }
 ```
+
+## Burn captions into a video
+
+`burn` draws a subtitle file into a video with the FFmpeg and ffprobe on your `PATH`, which the [Docker image](install.md#docker) includes:
+
+```bash
+assctl burn input.mp4 --subtitles captions.ass --output output.mp4
+```
+
+Drawing on the picture means the video stream has to be encoded again; it cannot be copied. `burn` encodes it with the same codec, resolution, frame rate, pixel format and color tags as the source, at a quality meant to look the same. Everything else is copied without change: audio, other video and subtitle tracks, cover art, chapters and metadata.
+
+| Source codec | Encoder | Default `--crf` | `--crf` range |
+| --- | --- | --- | --- |
+| H.264 | libx264 | 18 | 0 to 51 |
+| HEVC | libx265 | 20 | 0 to 51 |
+| VP9 | libvpx-vp9 | 20 | 0 to 63 |
+| AV1 | libsvtav1 | 23 | 1 to 63 |
+
+A lower `--crf` gives higher quality and a larger file. Other video codecs are rejected. An HEVC stream tagged `hvc1`, the tag Apple players need, keeps that tag.
+
+- The output's extension selects its container. Use the input's container, because another container may not accept every copied stream.
+- A phone video stored sideways with a rotation flag is turned upright before drawing, so the captions appear the right way up. The output stores the upright picture without the flag and shows the same image.
+- libass scales the script's `PlayResX` and `PlayResY` to the video. A script made for a different shape of video stretches to fit; `burn` does not check it.
+- HDR mastering metadata is not carried into the new encode.
+- `burn` writes a temporary file beside the output and renames it when FFmpeg succeeds, so a failed burn leaves no partial file. The output must differ from the input. FFmpeg's progress goes to stderr.
 
 ## Custom themes
 

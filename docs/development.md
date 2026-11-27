@@ -8,11 +8,11 @@ description: Build and test assctl and its Docusaurus documentation in Docker.
 - `make dep` resolves checksums and refreshes the committed vendor directory.
 - `make format`, `make lint`, and `make lint-fix` run in the pinned development image.
 - `make test` runs the complete offline suite, including real FFmpeg/libass renders and CLI subprocess checks, with Go's race detector.
-- `make test-unit` excludes render tests; `make test-integration` runs the renderer tests alone. A missing renderer is a test failure.
+- `make test-unit` excludes render tests; `make test-integration` runs the renderer tests alone, including `burn` on H.264, HEVC, VP9, AV1 and rotated videos. A missing renderer is a test failure.
 - `make test-coverage` runs the complete offline suite, writes the badge percentage, and fails below 90% coverage.
 - `make test-fuzz` fuzzes parser preservation and generated-script round trips with two workers and bounded runtimes. Their regression seeds also run in normal tests.
 - `make test-real` downloads every preset's pinned fonts into temporary user directories, verifies installation, checks that libass selects the intended font when rendering, and renders captions made with `--embed-preset-fonts` with no installed fonts. It requires upstream network access and checks verified offline reuse afterward. These tests, in `internal/pkg/fonts` and `cmd/assctl`, sit behind the `real` build tag, so no other target compiles them.
-- `make test-image` builds the production `Dockerfile` under a temporary tag, then checks it with networking off: the stamped version, and for every preset, `captions --embed-preset-fonts` and an FFmpeg render in which libass selects the installed preset font. It removes the image afterward. Building the image downloads the preset fonts.
+- `make test-image` builds the production `Dockerfile` under a temporary tag, then checks it with networking off: the stamped version, and for every preset, `captions --embed-preset-fonts` and an FFmpeg render in which libass selects the installed preset font, and `burn` on a test video. It removes the image afterward. Building the image downloads the preset fonts.
 - `make help` lists the available operations.
 - `make sec` checks for secrets and known Go vulnerabilities. It writes `sec.sarif` for GitHub Code Scanning.
 - `make docs` builds the Docusaurus site and checks internal links. The output is `website/build` under the `/assctl/` URL prefix.

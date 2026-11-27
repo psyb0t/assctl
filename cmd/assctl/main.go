@@ -28,7 +28,7 @@ func main() {
 
 func run(args []string, input io.Reader, output, diagnostics io.Writer) error {
 	checkedOutput := &commandOutput{writer: output}
-	command := cli{input: input, output: checkedOutput}
+	command := cli{input: input, output: checkedOutput, diagnostics: diagnostics}
 	root := command.rootCommand()
 	root.SetIn(input)
 	root.SetOut(checkedOutput)

@@ -7,6 +7,7 @@ import (
 	"github.com/psyb0t/ctxerrors"
 	"github.com/psyb0t/ctxerrors/commerr"
 
+	"github.com/psyb0t/assctl/internal/pkg/burn"
 	"github.com/psyb0t/assctl/pkg/ass"
 )
 
@@ -16,8 +17,9 @@ const (
 )
 
 type cli struct {
-	input  io.Reader
-	output io.Writer
+	input       io.Reader
+	output      io.Writer
+	diagnostics io.Writer
 }
 
 // createOptions are the inputs of the create and captions commands.
@@ -313,6 +315,21 @@ func (c cli) safeAreas(showJSON bool) error {
 		if err := writeString(c.output, area.Name+"\n"); err != nil {
 			return ctxerrors.Wrap(err, "list safe areas")
 		}
+	}
+
+	return nil
+}
+
+// burn draws subtitles into a copy of the input video. FFmpeg's progress goes
+// to the diagnostics stream.
+func (c cli) burn(ctx context.Context, input, subtitles, output string, crf *int) error {
+	if subtitles == "" || output == "" || subtitles == stream || output == stream || input == stream {
+		return ctxerrors.Wrap(commerr.ErrInvalidArgument, "burn needs an input video, --subtitles and --output files")
+	}
+	if err := burn.Burn(ctx, burn.Options{
+		Input: input, Subtitles: subtitles, Output: output, CRF: crf, Diagnostics: c.diagnostics,
+	}); err != nil {
+		return ctxerrors.Wrap(err, "burn subtitles into video")
 	}
 
 	return nil

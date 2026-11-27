@@ -17,6 +17,10 @@ Run `assctl fonts-install` on the machine that renders your subtitles. Check the
 
 `safe-area` lists each style or event whose margin is smaller than the platform needs, with the margin it has and the one it needs. Apply a social preset or a named position, or raise that margin with `edit`. See [platform safe areas](positions.md#platform-safe-areas).
 
+## Burning fails
+
+`burn` needs `ffmpeg` and `ffprobe` on your `PATH`; install FFmpeg or use the [Docker image](install.md#docker). It encodes H.264, HEVC, VP9 and AV1 video and rejects other codecs. When FFmpeg refuses to write a copied stream, write the output in the input's container, such as `.mkv` for a Matroska input. `--crf` must fall in the encoder's range listed in the [CLI guide](cli.md#burn-captions-into-a-video).
+
 ## The font download fails
 
 A first install requires access to the selected font's pinned upstream download. Sources include GitHub and DaFont. Restore connectivity and retry. Verified installed files are reused offline. Checksum failures stop installation before files are changed.

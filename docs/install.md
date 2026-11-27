@@ -13,6 +13,8 @@ assctl version
 assctl fonts-install
 ```
 
+`assctl burn` also needs FFmpeg and ffprobe on your `PATH`. Every other command works without them.
+
 Go puts the executable in `GOBIN`, or `$(go env GOPATH)/bin` when `GOBIN` is unset. Add that directory to your shell's `PATH` if needed. The font command installs the fonts every built-in preset needs for your user.
 
 With an existing ASS file, run:
@@ -27,7 +29,7 @@ To create a file from timed text, use the [caption example](cli.md#build-caption
 
 ## Docker
 
-The [`psyb0t/assctl`](https://hub.docker.com/r/psyb0t/assctl) image holds assctl, FFmpeg with libass, and every built-in preset's font, already verified and installed. It needs no Go, no font download and no network at run time. It is published for `linux/amd64` and `linux/arm64`.
+The [`psyb0t/assctl`](https://hub.docker.com/r/psyb0t/assctl) image holds assctl, FFmpeg with libass for `burn`, and every built-in preset's font, already verified and installed. It needs no Go, no font download and no network at run time. It is published for `linux/amd64` and `linux/arm64`.
 
 Mount the working directory at `/work` and run as your own user, so the files it writes belong to you:
 
@@ -38,11 +40,11 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
   safe-area captions.ass
 ```
 
-Burn the captions into a video with the image's FFmpeg:
+Burn the captions into a video with [`burn`](cli.md#burn-captions-into-a-video), which uses the image's FFmpeg:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint ffmpeg psyb0t/assctl \
-  -i input.mp4 -vf ass=captions.ass -c:a copy output.mp4
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
+  burn input.mp4 --subtitles captions.ass --output output.mp4
 ```
 
 `--embed-preset-fonts` works offline in the image, because the fonts are already installed. Paths are relative to `/work`, so files outside the mounted directory are not visible.

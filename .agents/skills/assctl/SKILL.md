@@ -9,7 +9,7 @@ metadata:
       bins: [assctl]
 permissions:
   network: "Upstream GitHub and DaFont downloads for fonts-install and --embed-preset-fonts. Subtitle editing works locally."
-  shell: "Run the assctl command, or the psyb0t/assctl Docker image with the working directory mounted."
+  shell: "Run the assctl command, which runs ffmpeg and ffprobe for burn, or the psyb0t/assctl Docker image with the working directory mounted."
   filesystem: "Read the requested subtitle, JSON or font files, write the requested output, and install preset fonts in the user font directory."
 ---
 
@@ -42,6 +42,6 @@ assctl validate themed.ass
 
 See [setup and JSON examples](references/setup.md) for timed captions and precise edits.
 
-Run `assctl safe-area FILE` before delivering captions for TikTok, Shorts or Reels; it fails when a style's or event's margins reach under the platform's buttons or captions. Add `--embed-preset-fonts` to `captions` or `theme` when the rendering machine should not need installed fonts; it also installs those fonts locally.
+Run `assctl burn VIDEO --subtitles FILE --output OUT` to draw captions into a video with FFmpeg; it re-encodes only the picture, in the source codec, and copies audio, tracks, chapters and metadata. Run `assctl safe-area FILE` before delivering captions for TikTok, Shorts or Reels; it fails when a style's or event's margins reach under the platform's buttons or captions. Add `--embed-preset-fonts` to `captions` or `theme` when the rendering machine should not need installed fonts; it also installs those fonts locally.
 
 `create`, `captions`, and `theme` accept `--text-position` to choose placement independently of appearance. `position` changes only style geometry. Existing event margins and inline tags keep their precedence. `tags --spec FILE` generates a typed override block, including karaoke, drawing, fades, clipping, and transforms. Typed durations in JSON use nanoseconds.

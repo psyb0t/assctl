@@ -43,7 +43,7 @@ func (c cli) rootCommand() *cobra.Command {
 		c.editCommand(), c.themeCommand(), c.presetsCommand(),
 		c.fontsCommand(),
 		c.positionsCommand(), c.positionCommand(), c.tagsCommand(),
-		c.safeAreaCommand(), c.safeAreasCommand(),
+		c.safeAreaCommand(), c.safeAreasCommand(), c.burnCommand(),
 		&cobra.Command{
 			Use: "version", Short: "Print the installed version", Args: exactArgs(0),
 			RunE: func(_ *cobra.Command, _ []string) error { return c.version() },
@@ -233,6 +233,29 @@ func (c cli) safeAreasCommand() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error { return c.safeAreas(showJSON) },
 	}
 	command.Flags().BoolVar(&showJSON, "json", false, "Include the edge ratios")
+
+	return command
+}
+
+func (c cli) burnCommand() *cobra.Command {
+	var subtitles, output string
+	var crf int
+	command := &cobra.Command{
+		Use:   "burn INPUT --subtitles FILE --output FILE",
+		Short: "Draw an ASS file into a video with FFmpeg, keeping its size, codec and other streams",
+		Args:  exactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var quality *int
+			if cmd.Flags().Changed("crf") {
+				quality = &crf
+			}
+
+			return c.burn(cmd.Context(), args[0], subtitles, output, quality)
+		},
+	}
+	command.Flags().StringVar(&subtitles, "subtitles", "", "ASS file to draw into the video (required)")
+	command.Flags().StringVar(&output, "output", "", "Video file to write; its extension selects the container (required)")
+	command.Flags().IntVar(&crf, "crf", 0, "Encoder quality instead of the visually lossless default; lower is better")
 
 	return command
 }

@@ -31,13 +31,13 @@ go install github.com/psyb0t/assctl/cmd/assctl@latest
 assctl fonts-install
 ```
 
-Or use the Docker image, which ships assctl, FFmpeg with libass and every preset font:
+Or use the Docker image, which ships assctl, FFmpeg with libass for `burn`, and every preset font:
 
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
   captions --preset tiktok-bold --spec timing.json --output captions.ass
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint ffmpeg psyb0t/assctl \
-  -i input.mp4 -vf ass=captions.ass -c:a copy output.mp4
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
+  burn input.mp4 --subtitles captions.ass --output output.mp4
 ```
 
 See [Docker](https://psyb0t.github.io/assctl/install/#docker) for tags and details.
@@ -53,7 +53,7 @@ assctl validate styled.ass
 
 `theme` updates the style definitions and preserves the original dialogue, event timing, inline tags, and unrelated sections. Use `--style NAME` to theme one style. Use `-` to read or write through a pipe.
 
-`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. `tags` generates override blocks for karaoke, drawing, fades, clipping, and animation. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
+`create` builds a script from typed JSON. `captions` turns already timed text into styled captions. `edit` changes selected script settings, style columns, and individual events. `tags` generates override blocks for karaoke, drawing, fades, clipping, and animation. `burn` draws the captions into a video with FFmpeg, re-encoding only the picture in its own codec and copying audio, tracks, chapters and metadata. See the [CLI guide](https://psyb0t.github.io/assctl/cli/) for examples and the JSON shape.
 
 ## Presets
 

@@ -9,7 +9,7 @@ metadata:
       bins: [assctl]
 permissions:
   network: "Upstream GitHub and DaFont downloads for fonts-install and --embed-preset-fonts. Subtitle editing works locally."
-  shell: "Run the assctl command."
+  shell: "Run the assctl command, or the psyb0t/assctl Docker image with the working directory mounted."
   filesystem: "Read the requested subtitle, JSON or font files, write the requested output, and install preset fonts in the user font directory."
 ---
 

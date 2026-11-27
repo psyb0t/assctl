@@ -6,6 +6,7 @@
 [![version](https://raw.githubusercontent.com/psyb0t/assctl/badges/version.svg)](https://github.com/psyb0t/assctl/releases)
 [![license](https://raw.githubusercontent.com/psyb0t/assctl/badges/license.svg)](LICENSE)
 [![imported by](https://raw.githubusercontent.com/psyb0t/assctl/badges/importers.svg)](https://github.com/psyb0t/assctl/blob/badges/importers.md)
+[![Docker Pulls](https://img.shields.io/docker/pulls/psyb0t/assctl?style=flat-square)](https://hub.docker.com/r/psyb0t/assctl)
 
 Your subtitles already have timing. Now make the damn things look good. assctl creates, inspects, edits, validates, and themes Advanced SubStation Alpha (ASS) files, from a terminal or your own Go code.
 
@@ -29,6 +30,17 @@ Go 1.26 or newer.
 go install github.com/psyb0t/assctl/cmd/assctl@latest
 assctl fonts-install
 ```
+
+Or use the Docker image, which ships assctl, FFmpeg with libass and every preset font:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl \
+  captions --preset tiktok-bold --spec timing.json --output captions.ass
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint ffmpeg psyb0t/assctl \
+  -i input.mp4 -vf ass=captions.ass -c:a copy output.mp4
+```
+
+See [Docker](https://psyb0t.github.io/assctl/install/#docker) for tags and details.
 
 ## Quick start
 
@@ -95,7 +107,7 @@ The [assctl documentation](https://psyb0t.github.io/assctl/) covers the CLI and 
 
 | Guide | What you need |
 | --- | --- |
-| [Installation](https://psyb0t.github.io/assctl/install/) | Install, update, and prepare fonts |
+| [Installation](https://psyb0t.github.io/assctl/install/) | Install with Go or Docker, update, and prepare fonts |
 | [CLI](https://psyb0t.github.io/assctl/cli/) | Commands, flags, and JSON examples |
 | [Presets and fonts](https://psyb0t.github.io/assctl/presets/) | Palettes, backgrounds, font installation, and embedded fonts |
 | [Text positions](https://psyb0t.github.io/assctl/positions/) | Independent placement, platform safe areas, margins, and override precedence |

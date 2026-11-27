@@ -3,7 +3,7 @@
 > ASS subtitle creation, editing, validation, presets, and fonts through a Go CLI and library.
 
 - [assctl](https://psyb0t.github.io/assctl/): Create, edit, validate, and theme ASS subtitles from the CLI or your own Go code.
-- [Installation](https://psyb0t.github.io/assctl/install/): Install assctl, set up preset fonts, and update the command.
+- [Installation](https://psyb0t.github.io/assctl/install/): Install assctl with Go or run the Docker image, set up preset fonts, and update the command.
 - [CLI guide](https://psyb0t.github.io/assctl/cli/): Commands, flags, JSON formats, file editing, and shell completion.
 - [Presets and fonts](https://psyb0t.github.io/assctl/presets/): Choose a complete look, install or embed the fonts built-in presets need, and keep social captions inside platform safe areas.
 - [Text positions](https://psyb0t.github.io/assctl/positions/): Place captions with independent layouts, keep them inside TikTok, YouTube Shorts and Instagram Reels safe areas, and understand ASS margins.

@@ -14,6 +14,10 @@ const (
 	goDevelVersion = "(devel)"
 )
 
+// buildVersion is stamped by builds that have no module version, such as the
+// Docker image: go build -ldflags "-X main.buildVersion=...".
+var buildVersion string
+
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		// The process exits with status 1 either way, and stderr has nowhere else to report a failed write.
@@ -41,13 +45,23 @@ func run(args []string, input io.Reader, output, diagnostics io.Writer) error {
 }
 
 func (c cli) version() error {
-	version := devVersion
-	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != goDevelVersion {
-		version = info.Main.Version
-	}
-	if err := writeString(c.output, version+"\n"); err != nil {
+	info, _ := debug.ReadBuildInfo()
+	if err := writeString(c.output, resolveVersion(buildVersion, info)+"\n"); err != nil {
 		return ctxerrors.Wrap(err, "print version")
 	}
 
 	return nil
+}
+
+// resolveVersion prefers a stamped version, then the module version Go records
+// for go install, then devVersion.
+func resolveVersion(stamped string, info *debug.BuildInfo) string {
+	if stamped != "" {
+		return stamped
+	}
+	if info != nil && info.Main.Version != "" && info.Main.Version != goDevelVersion {
+		return info.Main.Version
+	}
+
+	return devVersion
 }

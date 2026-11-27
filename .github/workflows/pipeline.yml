@@ -19,7 +19,7 @@ jobs:
     with:
       build_command: "make build"
       lint_command: "make lint"
-      test_command: "make test-coverage test-fuzz test-real"
+      test_command: "make test-coverage test-fuzz test-real test-image"
       sec_command: "make sec"
       coverage_file: "coverage-percent.txt"
       sarif_file: "sec.sarif"
@@ -32,8 +32,55 @@ jobs:
       actions: read
     uses: psyb0t/reusable-github-workflows/.github/workflows/wait-for-default-branch.yml@master
 
-  release:
+  # A push to main builds the image and publishes :latest and :sha-<commit>;
+  # other branches stop after the build. The weekly schedule and manual runs
+  # never republish an image. BUILD_VERSION names the sha tag, so a promoted
+  # release image reports the build it was promoted from.
+  docker:
+    needs: [code]
+    if: "!startsWith(github.ref, 'refs/tags/') && github.event_name == 'push'"
+    permissions:
+      contents: write # the called workflow checks it up front for its release job
+      security-events: write # upload the Grype SARIF to the Security tab
+    uses: psyb0t/reusable-github-workflows/.github/workflows/docker-image-workflow.yml@master
+    with:
+      repository_name: psyb0t/assctl
+      target_platforms: "linux/amd64,linux/arm64"
+      build_targets: '[{"build_args":"BUILD_VERSION=sha-${{ github.sha }}"}]'
+      push_sha_tag: true
+      scan_severity: "high"
+      scan_fail_build: false
+      dockerhub_private: false
+      sync_description: true
+    secrets:
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # A tag waits for the main run of its commit, then re-tags the image that run
+  # built and tested as :vX.Y.Z, by digest, without rebuilding.
+  docker-promote:
     needs: [wait]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      security-events: write
+    uses: psyb0t/reusable-github-workflows/.github/workflows/docker-image-workflow.yml@master
+    with:
+      repository_name: psyb0t/assctl
+      target_platforms: "linux/amd64,linux/arm64"
+      promote_on_tag: true
+      # The release job below cuts the release from the tag's own notes.
+      create_release: false
+      scan_severity: "high"
+      scan_fail_build: false
+      dockerhub_private: false
+      sync_description: true
+    secrets:
+      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  release:
+    needs: [docker-promote]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write

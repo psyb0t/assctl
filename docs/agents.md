@@ -5,7 +5,7 @@ description: Use the assctl skill with Claude Code, Codex, and OpenClaw.
 
 # Agent integrations
 
-Install the [CLI](install.md) first. The [assctl skill](https://github.com/psyb0t/assctl/tree/main/.agents/skills/assctl) teaches agents to inspect subtitle files, apply presets, edit selected fields, and validate output. The executable must be on the agent's `PATH`.
+Install the [CLI](install.md) first. The [assctl skill](https://github.com/psyb0t/assctl/tree/main/.agents/skills/assctl) teaches agents to inspect subtitle files, apply presets, edit selected fields, and validate output. The executable must be on the agent's `PATH`, or the agent can run the [Docker image](install.md#docker) the same way.
 
 ## Claude Code and Codex
 

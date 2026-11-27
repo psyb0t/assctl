@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -139,6 +140,34 @@ func TestCLIRealProcessExitStatus(t *testing.T) {
 			document, err := ass.Parse(&output)
 			require.NoError(t, err)
 			require.NoError(t, document.Validate())
+		})
+	}
+}
+
+func TestResolveVersion(t *testing.T) {
+	t.Parallel()
+
+	module := func(version string) *debug.BuildInfo {
+		return &debug.BuildInfo{Main: debug.Module{Version: version}}
+	}
+	testCases := []struct {
+		name    string
+		stamped string
+		info    *debug.BuildInfo
+		want    string
+	}{
+		{name: "stamped version wins", stamped: "sha-abc", info: module("v1.2.3"), want: "sha-abc"},
+		{name: "module version", info: module("v1.2.3"), want: "v1.2.3"},
+		{name: "development build", info: module("(devel)"), want: "dev"},
+		{name: "empty module version", info: module(""), want: "dev"},
+		{name: "no build information", want: "dev"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tc.want, resolveVersion(tc.stamped, tc.info))
 		})
 	}
 }

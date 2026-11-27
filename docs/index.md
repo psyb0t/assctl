@@ -10,7 +10,7 @@ Give your subtitles a look worth keeping. assctl creates Advanced SubStation Alp
 
 | Task | Guide |
 | --- | --- |
-| Install the CLI and preset fonts | [Installation](install.md) |
+| Install the CLI and preset fonts, or run the Docker image | [Installation](install.md) |
 | Create, inspect, edit, validate, and theme | [CLI guide](cli.md) |
 | Choose a look, and install or embed its fonts | [Presets and fonts](presets.md) |
 | Place captions and check platform safe areas | [Text positions](positions.md) |

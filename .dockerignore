@@ -1,10 +1,24 @@
+# The Dockerfile copies only go.mod, go.sum, vendor/, cmd/, internal/ and pkg/.
+# The rest is kept out of the build context so it stays small and secrets or
+# scratch never reach the daemon.
 .git
+.github
+.agents
+docs/
+website/
+*.md
 .logs
 .testing
 .research_files
+.telemetry/
+.plan/
+.discuss/
+.agent_notes/
+.agent_knowledge/
 .env*
 *.local.json
 git-update.sh
 git-update.sh.debot
 bin
-.telemetry/
+coverage*
+sec.sarif

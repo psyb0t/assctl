@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.0 (2026-11-27)
+
+assctl now ships as the `psyb0t/assctl` Docker image, with FFmpeg and libass and every built-in preset's font already verified and installed, so it can create, check and burn captions with no Go, no font download and no network.
+
+- Added the `psyb0t/assctl` image for `linux/amd64` and `linux/arm64`. Default-branch builds publish `latest` and `sha-<commit>`, and each release promotes its commit's image to `vX.Y.Z` without rebuilding.
+- `assctl version` prints the version stamped at build time when the binary has no module version, such as `sha-<commit>` in the image.
+
 ## v0.2.0 (2026-11-27)
 
 Social captions now stay out from under TikTok, YouTube Shorts and Instagram Reels buttons, using each platform's published safe area, and scripts can carry their own fonts. Go callers and existing specs have three breaking changes to migrate:

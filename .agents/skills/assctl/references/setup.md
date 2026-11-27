@@ -1,12 +1,22 @@
 # Setup
 
-Install with Go 1.26 or newer.
+Install with Go 1.26 or newer, or use the Docker image below.
 
 ```bash
 go install github.com/psyb0t/assctl/cmd/assctl@latest
 assctl version
 assctl fonts-install
 ```
+
+The `psyb0t/assctl` Docker image already holds assctl, FFmpeg with libass and every preset font, so it needs no font download. Mount the working directory at `/work` and run as the current user:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" psyb0t/assctl validate captions.ass
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" --entrypoint ffmpeg psyb0t/assctl \
+  -i input.mp4 -vf ass=captions.ass -c:a copy output.mp4
+```
+
+Only files under the mounted directory are visible to the container. See [Docker](https://psyb0t.github.io/assctl/install/#docker).
 
 ## Named looks
 

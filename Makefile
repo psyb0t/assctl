@@ -5,7 +5,7 @@ DEV_RUN := docker run --rm --init --cap-drop ALL --security-opt no-new-privilege
 	--user "$(UID):$(GID)" -e HOME=/tmp -e GOPATH=/tmp/go -e GOCACHE=/tmp/go-build \
 	-v "$(CURDIR):/work" -w /work
 
-.PHONY: all build check dep dev-image format lint lint-fix sec test test-unit test-integration test-coverage test-real test-fuzz help
+.PHONY: all build check dep dev-image format lint lint-fix sec test test-unit test-integration test-coverage test-real test-fuzz test-image help
 
 all: check
 
@@ -45,8 +45,17 @@ test-fuzz: dev-image
 test-coverage: dev-image
 	$(DEV_RUN) --network none $(DEV_IMAGE) sh -ec 'go test -mod=vendor -race -count=1 -timeout=5m -coverprofile=coverage.out ./... && go tool cover -func=coverage.out | awk "/^total:/{print \$$NF; if (\$$NF+0 < 90) exit 1}" > coverage-percent.txt && test -s coverage-percent.txt'
 
+# test-image builds the production image under a random tag owned by this
+# target, checks it offline with scripts/test-image.sh, and removes it.
+test-image:
+	@image="assctl-image-test-$$(cat /proc/sys/kernel/random/uuid)"; \
+	cleanup() { if docker image inspect "$$image" >/dev/null 2>&1; then docker image rm "$$image" >/dev/null; fi; }; \
+	trap cleanup EXIT; \
+	docker build --build-arg BUILD_VERSION=image-test -t "$$image" . && \
+	bash scripts/test-image.sh "$$image" image-test
+
 help:
-	@printf '%s\n' 'build: compile the CLI' 'check: lint, complete tests, and build' 'format: format Go sources' 'lint / lint-fix: check or fix lint' 'test: offline unit and real renderer tests' 'test-unit: offline tests without renders' 'test-integration: FFmpeg/libass render tests' 'test-coverage: complete offline suite, minimum 90%' 'test-real: download and render every preset font' 'test-fuzz: bounded parser and generated-script fuzzing' 'sec: secrets and Go vulnerability scans' 'docs: build documentation' 'dep: refresh vendored dependencies'
+	@printf '%s\n' 'build: compile the CLI' 'check: lint, complete tests, and build' 'format: format Go sources' 'lint / lint-fix: check or fix lint' 'test: offline unit and real renderer tests' 'test-unit: offline tests without renders' 'test-integration: FFmpeg/libass render tests' 'test-coverage: complete offline suite, minimum 90%' 'test-real: download and render every preset font' 'test-fuzz: bounded parser and generated-script fuzzing' 'test-image: build the Docker image and render every preset in it offline' 'sec: secrets and Go vulnerability scans' 'docs: build documentation' 'dep: refresh vendored dependencies'
 
 sec: dev-image
 	docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true -v "$(CURDIR):/work:ro" ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir --config /work/.gitleaks.toml --redact --no-banner /work

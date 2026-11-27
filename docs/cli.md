@@ -9,8 +9,12 @@
 | `edit --spec FILE --output FILE INPUT` | Apply a JSON `ass.Edit` to an existing script. |
 | `theme --preset NAME --output FILE INPUT` | Apply a named look. Add `--style NAME` to restrict it to one style. |
 | `presets --json` | Print the full values for all presets. |
+| `version` or `--version` | Print the installed version. |
+| `completion SHELL` | Generate completion for Bash, Zsh, Fish, or PowerShell. |
 
-Pass flags before the positional input. `--output` defaults to stdout and accepts `-`. `create` and `captions` default to stdin for their JSON specs. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
+Flags can appear before or after the positional input. Run `assctl COMMAND --help` for command-specific options. `--output` defaults to stdout and accepts `-`. `create` and `captions` default to stdin for their JSON specs. An explicit output file may replace an existing file. Omit the output path or write to a new file to keep the original.
+
+The command tree and help use Cobra. Run `assctl completion SHELL --help` for installation instructions for your shell.
 
 ## Build captions from timed text
 

@@ -66,7 +66,7 @@ func TestCLIHelpPresetsAndVersion(t *testing.T) {
 	t.Parallel()
 
 	for _, args := range [][]string{nil, {"help"}, {"-h"}, {"--help"}} {
-		if got := runCLI(t, "", args...); !strings.HasPrefix(got, "Usage: assctl ") {
+		if got := runCLI(t, "", args...); !strings.Contains(got, "Usage:") || !strings.Contains(got, "Available Commands:") {
 			t.Fatalf("%v returned %q", args, got)
 		}
 	}
@@ -74,13 +74,39 @@ func TestCLIHelpPresetsAndVersion(t *testing.T) {
 	if want := []string{"black-gold", "ivory-navy", "mint-plum", "clean"}; !slices.Equal(presets, want) {
 		t.Fatalf("presets returned %v, want %v", presets, want)
 	}
-	if got := runCLI(t, "", "version"); got != "dev\n" {
-		t.Fatalf("version returned %q for local build", got)
+	for _, args := range [][]string{{"version"}, {"--version"}} {
+		if got := runCLI(t, "", args...); got != "dev\n" {
+			t.Fatalf("version returned %q for local build", got)
+		}
 	}
 	var output, diagnostics bytes.Buffer
 	if err := run([]string{"captions", "--help"}, strings.NewReader(""), &output, &diagnostics); err != nil ||
-		output.Len() != 0 || !strings.Contains(diagnostics.String(), "-theme-file") {
+		diagnostics.Len() != 0 || !strings.Contains(output.String(), "--theme-file") {
 		t.Fatalf("command help returned %v, stdout %q, stderr %q", err, output.String(), diagnostics.String())
+	}
+}
+
+func TestCLIFlagsAfterInputAndCompletion(t *testing.T) {
+	t.Parallel()
+
+	source := filepath.Join(t.TempDir(), "source.ass")
+	runCLI(t, scriptJSON, "create", "--output", source)
+	themed := runCLI(t, "", "theme", source, "--preset", "mint-plum", "--style", "Default")
+	document, err := ass.Parse(strings.NewReader(themed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := document.Contents().Styles[0]["Fontname"]; got != "DejaVu Sans Mono" {
+		t.Fatalf("theme flag after input selected font %q", got)
+	}
+	completion := runCLI(t, "", "completion", "bash")
+	if !strings.Contains(completion, "__start_assctl") {
+		t.Fatal("bash completion lacks the assctl entry point")
+	}
+	var output bytes.Buffer
+	err = run([]string{"completion", "unknown-shell"}, strings.NewReader(""), &output, io.Discard)
+	if err == nil || output.Len() != 0 {
+		t.Fatalf("invalid completion shell returned %v, output %q", err, output.String())
 	}
 }
 
@@ -94,7 +120,7 @@ func TestCLIRejectsInvalidArgumentsAndFiles(t *testing.T) {
 		input string
 		want  error
 	}{
-		{name: "unknown command", args: []string{"unknown"}, want: errUsage},
+		{name: "unknown command", args: []string{"unknown"}},
 		{name: "extra version argument", args: []string{"version", "extra"}, want: errUsage},
 		{name: "unrecognized flag", args: []string{"presets", "--bad"}},
 		{name: "two JSON values", args: []string{"create"}, input: scriptJSON + " {}", want: errUsage},
